@@ -34,25 +34,38 @@
 __version__ = '0.1'
 
 
-from kamaki.clients.astakos import Client, ClientError
+from kamaki.clients import Client
 
 
 class IdentityClient(Client):
     """An Extended Identity Client"""
+    service_type = 'identity'
 
     def list_users(self):
         """List all users"""
+        return self.get('users', success=200).json['users']
 
     def create_user(
             self, username, first_name, last_name, affilication,
             metadata=None):
         """Create a new user"""
+        kwargs = dict(
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            affilication=affilication)
+        if metadata:
+            kwargs['metadata'] = metadata
+        r = self.post('users', json=dict(user=kwargs), success=201)
+        return r.json['user']
+
 
     def get_user_details(self, user_id):
         """Get user details"""
+        return self.get('users/%s' % user_id, success=200).json['user']
 
     def modify_user(
-            self,
+            self, user_id,
             username=None,
             first_name=None,
             last_name=None,
@@ -61,15 +74,41 @@ class IdentityClient(Client):
             email=None,
             metadata=None):
         """Modify User"""
+        kwargs = dict()
+        if username:
+            kwargs['username'] = username
+        if first_name:
+            kwargs['first_name'] = first_name
+        if last_name:
+            kwargs['last_name'] = last_name
+        if affilication:
+            kwargs['affilication'] = affilication
+        if password:
+            kwargs['password'] = password
+        if email:
+            kwargs['email'] = email
+        if metadata:
+            kwargs['metadata'] = metadata
+        r = self.put('users/%s' % user_id, json=dict(user=kwargs), success=200)
+        return r.json['user']
 
     def activate_user(self, user_id):
         """Activate a user"""
+        r = self.post(
+            'users/%s/action' % user_id, json=dict(activate={}), success=200)
+        return r.json['user']
 
     def deactivate_user(self, user_id):
         """Deactivate a user"""
+        r = self.post(
+            'users/%s/action' % user_id, json=dict(deactivate={}), success=200)
+        return r.json['user']
 
     def renew_user_token(self, user_id):
         """Renew user authentication token"""
+        r = self.post(
+            'users/%s/action' % user_id, json=dict(renewToken={}), success=200)
+        return r.json['user']
 
 
 def main():
