@@ -31,7 +31,7 @@
 # interpreted as representing official policies, either expressed
 # or implied, of GRNET S.A.
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 
 from kamaki.clients import Client
@@ -58,7 +58,6 @@ class IdentityClient(Client):
             kwargs['metadata'] = metadata
         r = self.post('users', json=dict(user=kwargs), success=201)
         return r.json['user']
-
 
     def get_user_details(self, user_id):
         """Get user details"""
