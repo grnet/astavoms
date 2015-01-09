@@ -34,5 +34,44 @@
 __version__ = '0.1'
 
 
+from kamaki.clients.astakos import Client, ClientError
+
+
+class IdentityClient(Client):
+    """An Extended Identity Client"""
+
+    def list_users(self):
+        """List all users"""
+
+    def create_user(
+            self, username, first_name, last_name, affilication,
+            metadata=None):
+        """Create a new user"""
+
+    def get_user_details(self, user_id):
+        """Get user details"""
+
+    def modify_user(
+            self,
+            username=None,
+            first_name=None,
+            last_name=None,
+            affilication=None,
+            password=None,
+            email=None,
+            metadata=None):
+        """Modify User"""
+
+    def activate_user(self, user_id):
+        """Activate a user"""
+
+    def deactivate_user(self, user_id):
+        """Deactivate a user"""
+
+    def renew_user_token(self, user_id):
+        """Renew user authentication token"""
+
+
 def main():
-    raise NotImplementedError
+    import sys
+    sys.stdout.write('astavoms kamaki extension v' + __version__ + '\n')
