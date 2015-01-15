@@ -1,0 +1,15 @@
+:: _Changelog:
+
+v0.2
+====
+
+Imlement a class IndentityClient with the following methods:
+
+* list_users
+* create_user
+* get_user_details
+* modify_user
+* activate_user
+* deactivate_user
+* renew_user_token
+
