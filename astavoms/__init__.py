@@ -33,6 +33,100 @@
 
 __version__ = '0.2'
 
+from kamaki.clients import ClientError
+from astavoms import ldap, identity
+
+
+class SnfOcciUsers(object):
+    """Translate OCCI users to Synnefo users and manage their properties"""
+
+    def __init__(
+            self, snf_auth_url, snf_admin_token,
+            ldap_url, ldap_user, ldap_password, base_dn,
+            ca_cert_file=None):
+        self.snf_auth_url, self.snf_admin_token = snf_auth_url, snf_admin_token
+        self.snf_admin = identity.IdentityClient(snf_auth_url, snf_admin_token)
+        self.snf_admin_id = self.snf_admin.user_info['id']
+        self.ldap_conf = dict(
+            ldap_url=ldap_url,
+            user=ldap_user, password=ldap_password,
+            base_dn=base_dn,
+            ca_cert_file=ca_cert_file)
+        self.snf_user_client = identity.IdentityClient(
+            snf_auth_url, snf_admin_token)
+
+    @staticmethod
+    def dn_to_dict(user_dn):
+        """
+        :param user_dn: a string, typically of the form
+            /C=<country>/O=<org name>/OU=<domain>/CN=<full user name>
+        :returns: a dict from a user_dn, all keys are uppercase
+        """
+        return dict(map(
+            lambda x: (x[0].upper(), x[1]),
+            [i.split('=') for i in user_dn.split('/') if i]))
+
+    @staticmethod
+    def create_user_email(dn, vo):
+        user = SnfOcciUsers.dn_to_dict
+        full_name = '' % ''.join(
+            [(c if (c.isalpha() or c.isdigit()) else '_') for c in user['CN']])
+        vo += '.' if vo else ''
+        return '%s%s@%s' % (vo, full_name, user['OU'])
+
+    def get_cached_user(self, dn, vo):
+        """
+        :returns: user info from LDAP
+        :raises KeyError: if not in LDAP
+        """
+        cn = self.dn_to_dict(dn)['CN']
+        with ldap.LDAUser(**self.ldap_conf) as ldap_user:
+            return ldap_user.search_by_vo(cn, vo)[dn]
+
+    def cache_user(self, uuid, email, token, dn, vo, cert=None):
+        cn = self.dn_to_dict(dn)['CN']
+        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+            return ldap_user.create(uuid, cn, email, token, vo, dn, cert)
+
+    def vo_to_project(self, vo):
+        """
+        :returns: project with name==vo and owned by admin
+        :raises ClientError: 404 if not found
+        :raises ClientError: 409 if more than one projects match
+        """
+        vo_projects = self.get_projects(name=vo, owner=self.snf_admin_id)
+        if vo_projects:
+            if len(vo_projects) > 1:
+                raise ClientError(
+                    'More than one projects matching name %s' % vo, 409)
+            return vo_projects[0]
+        raise ClientError('No projects matching name %s' % vo, 404)
+
+    @staticmethod
+    def split_full_name(full_name):
+        names = [name for name in full_name.split(' ') if name]
+        return names[0], ' '.join(names[1:])
+
+    def get_user_info(self, dn, vo):
+        """ If user not cached, attempt to create it
+        :returns: cached user info from LDAP directory
+        :raises ClientError: 404 if the project is not found
+        :raises ClientError: 409 if more than one projects match, new user
+            exists or new user is already enrolled to project
+        :raises KeyError: if dn is not formated as expected
+        """
+        try:
+            return self.get_cached_user(dn, vo)
+        except KeyError:
+            project = self.vo_to_project(vo)
+            email = self.create_user_email(dn, vo)
+            dn_dict = self.dn_to_dict(dn)
+            first, last = self.split_full_name(dn_dict['CN'])
+            user = self.snf_admin.create_user(email, first, last, dn_dict['O'])
+            self.snf_admin.enroll_member(project['id'], email)
+            return self.cache_user(
+                user['id'], email, user['auth_token'], dn, vo)
+
 
 def main():
     import sys
