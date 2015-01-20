@@ -38,7 +38,7 @@ from setuptools import setup
 import astavoms
 
 
-requires = ['kamaki>=0.12.1', ]
+requires = ['kamaki>=0.13.1', ]
 
 setup(
     name='astavoms',
