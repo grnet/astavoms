@@ -53,6 +53,7 @@ class LDAPUser:
 
     def __enter__(self):
             self.con.simple_bind_s(self.user, self.password)
+            return self
 
     def __exit__(self, type, value, traceback):
             self.con.unbind()

@@ -38,7 +38,7 @@ from setuptools import setup
 import astavoms
 
 
-requires = ['kamaki>=0.13.1', ]
+requires = ['kamaki>=0.13.1', 'python-ldap']
 
 setup(
     name='astavoms',

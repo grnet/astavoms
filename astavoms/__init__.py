@@ -34,7 +34,7 @@
 __version__ = '0.3'
 
 from kamaki.clients import ClientError
-from astavoms import ldap, identity
+from astavoms import vomsdir, identity
 from inspect import getmembers, ismethod
 
 
@@ -79,7 +79,7 @@ class SnfOcciUsers(object):
         :raises KeyError: if not in LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
-        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
             return dict(ldap_user.search_by_vo(cn, vo))[dn]
 
     def cache_user(self, uuid, email, token, dn, vo, cert=None):
@@ -87,7 +87,7 @@ class SnfOcciUsers(object):
         :returns: (dict) updated user info from LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
-        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
             ldap_user.create(uuid, cn, email, token, vo, dn, cert)
             return self.get_cached_user(dn, vo)
 
@@ -148,7 +148,7 @@ class SnfOcciUsers(object):
                     print 'Renew token and retry %s.%s(...)' % (
                         cls.__name__, name)
                     user = self.snf_admin.renew_user_token(user_id)
-                    with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+                    with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
                         ldap_user.update_token(user['id'], user['auth_token'])
                     cls.token = user['auth_token']
                     return method(*args, **kwargs)
@@ -161,7 +161,7 @@ class SnfOcciUsers(object):
         :returns: uuid
         :raises KeyError: if token not found
         """
-        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
             return ldap_user.search_by_token(token, ['uuid', ])[0][1]['uid']
 
 
