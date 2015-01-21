@@ -79,7 +79,7 @@ class SnfOcciUsers(object):
         :raises KeyError: if not in LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
-        with ldap.LDAUser(**self.ldap_conf) as ldap_user:
+        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
             return dict(ldap_user.search_by_vo(cn, vo))[dn]
 
     def cache_user(self, uuid, email, token, dn, vo, cert=None):
