@@ -156,6 +156,14 @@ class SnfOcciUsers(object):
             cls.__setattr__(name, wrap)
         return cls
 
+    def uuid_from_token(self, token):
+        """Lookup token in LDAP dir
+        :returns: uuid
+        :raises KeyError: if token not found
+        """
+        with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+            return ldap_user.search_by_token(token, ['uuid', ])[0][1]['uid']
+
 
 def main():
     import sys
