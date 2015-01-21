@@ -35,6 +35,7 @@ __version__ = '0.3'
 
 from kamaki.clients import ClientError
 from astavoms import ldap, identity
+from inspect import getmembers, ismethod
 
 
 class SnfOcciUsers(object):
@@ -52,8 +53,6 @@ class SnfOcciUsers(object):
             user=ldap_user, password=ldap_password,
             base_dn=base_dn,
             ca_cert_file=ca_cert_file)
-        self.snf_user_client = identity.IdentityClient(
-            snf_auth_url, snf_admin_token)
 
     @staticmethod
     def dn_to_dict(user_dn):
@@ -76,17 +75,21 @@ class SnfOcciUsers(object):
 
     def get_cached_user(self, dn, vo):
         """
-        :returns: user info from LDAP
+        :returns: (dict) user info from LDAP
         :raises KeyError: if not in LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
         with ldap.LDAUser(**self.ldap_conf) as ldap_user:
-            return ldap_user.search_by_vo(cn, vo)[dn]
+            return dict(ldap_user.search_by_vo(cn, vo))[dn]
 
     def cache_user(self, uuid, email, token, dn, vo, cert=None):
+        """
+        :returns: (dict) updated user info from LDAP
+        """
         cn = self.dn_to_dict(dn)['CN']
         with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
-            return ldap_user.create(uuid, cn, email, token, vo, dn, cert)
+            ldap_user.create(uuid, cn, email, token, vo, dn, cert)
+            return self.get_cached_user(dn, vo)
 
     def vo_to_project(self, vo):
         """
@@ -109,7 +112,7 @@ class SnfOcciUsers(object):
 
     def get_user_info(self, dn, vo):
         """ If user not cached, attempt to create it
-        :returns: cached user info from LDAP directory
+        :returns: (dict) cached user info from LDAP directory
         :raises ClientError: 404 if the project is not found
         :raises ClientError: 409 if more than one projects match, new user
             exists or new user is already enrolled to project
@@ -126,6 +129,32 @@ class SnfOcciUsers(object):
             self.snf_admin.enroll_member(project['id'], email)
             return self.cache_user(
                 user['id'], email, user['auth_token'], dn, vo)
+
+    def add_renew_token(self, cls, user_id):
+        """ In case of authentication failure, cls gets a new token and the
+            failed method is run again.
+        :returns: cls with all its methods wrapped
+        """
+        cls_methods = [m for m in getmembers(cls) if (
+            not m[0].startswith('_')) and ismethod(m[1])]
+        for name, method in cls_methods:
+            def wrap(*args, **kwargs):
+                try:
+                    return method(*args, **kwargs)
+                except ClientError as ce:
+                    if ce.status not in (401, ):
+                        raise
+                    print 'User', user_id, ':', ce
+                    print 'Renew token and retry %s.%s(...)' % (
+                        cls.__name__, name)
+                    user = self.snf_admin.renew_user_token(user_id)
+                    with ldap.LDAPUser(**self.ldap_conf) as ldap_user:
+                        ldap_user.update_token(user['id'], user['auth_token'])
+                    cls.token = user['auth_token']
+                    return method(*args, **kwargs)
+            wrap.__name__ = name
+            cls.__setattr__(name, wrap)
+        return cls
 
 
 def main():

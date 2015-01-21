@@ -61,11 +61,11 @@ class LDAPUser:
         return self.con.search_s(
             self.base_dn, ldap.SCOPE_SUBTREE, query, attrlist)
 
-    def search_by_vo(self, user_cn, user_vo, attrlist=['userpassword', ]):
+    def search_by_vo(self, user_cn, user_vo, attrlist=[]):
         query = '(&(objectclass=person)(cn=%s)(sn=%s))' % (user_cn, user_vo)
         return self._search(query, attrlist)
 
-    def search_by_token(self, token, attrlist=['givenName', ]):
+    def search_by_token(self, token, attrlist=[]):
         query = '(&(objectclass=person)(userpassword=%s))' % token
         return self._search(query, attrlist)
 
