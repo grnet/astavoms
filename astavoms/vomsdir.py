@@ -62,13 +62,39 @@ class LDAPUser:
         return self.con.search_s(
             self.base_dn, ldap.SCOPE_SUBTREE, query, attrlist)
 
+    def search_by_uid(self, userUID, attrlist=[]):
+        """
+        :return: (dict) of the form dict(dn={...})
+        """
+        query = '(&(objectclass=person)(uid=%s))' % userUID
+        return dict(self._search(query, attrlist))
+
     def search_by_vo(self, user_cn, user_vo, attrlist=[]):
+        """
+        :return: (dict) of the form dict(dn={...})
+        """
         query = '(&(objectclass=person)(cn=%s)(sn=%s))' % (user_cn, user_vo)
         return self._search(query, attrlist)
 
     def search_by_token(self, token, attrlist=[]):
+        """
+        :return: (dict) of the form dict(dn={...})
+        """
         query = '(&(objectclass=person)(userpassword=%s))' % token
         return self._search(query, attrlist)
+
+    def delete_user(self, userUID):
+        """Remove a user from the LDAP directory
+        :raises ldap.NO_SUCH_OBJECT: if this user is not in the LDAP directory
+        """
+        dn = 'uid=%s,%s' % (userUID, self.base_dn)
+        self.con.delete_s(dn)
+
+    def list_users(self, attrlist=[]):
+        """
+        :return: (dict) of the form dict(dn={...}, ...)
+        """
+        return self._search('(&(objectclass=person))', attrlist)
 
     def create(
             self, userUID, certCN, email, token, user_vo, userClientDN,

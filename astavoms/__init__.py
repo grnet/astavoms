@@ -80,7 +80,7 @@ class SnfOcciUsers(object):
         """
         cn = self.dn_to_dict(dn)['CN']
         with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
-            return dict(ldap_user.search_by_vo(cn, vo))[dn]
+            return ldap_user.search_by_vo(cn, vo)[dn]
 
     def cache_user(self, uuid, email, token, dn, vo, cert=None):
         """
@@ -162,7 +162,8 @@ class SnfOcciUsers(object):
         :raises KeyError: if token not found
         """
         with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
-            return ldap_user.search_by_token(token, ['uuid', ])[0][1]['uid']
+            r = ldap_user.search_by_token(token, ['uuid', ])
+            return r.values()[0]['uid']
 
 
 def main():
