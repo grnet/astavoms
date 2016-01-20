@@ -38,13 +38,13 @@ from setuptools import setup
 import astavoms
 
 
-requires = ['kamaki>=0.13.1', 'python-ldap']
+requires = ['kamaki', 'python-ldap', 'Flask']
 
 setup(
     name='astavoms',
     version=astavoms.__version__,
-    description=('A multipurpose, interactive command-line tool, and also a'
-                 ' client development library for managing OpenStack clouds.'),
+    description=('a minimal proxy server able to translate VOMS user '
+                 'information to Synnefo/Astakos credentials, with tools.'),
     long_description=open('README.md').read(),
     url='',
     download_url='',
