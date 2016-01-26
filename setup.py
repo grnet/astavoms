@@ -34,15 +34,11 @@
 # or implied, of GRNET S.A.
 
 from setuptools import setup
-
-import astavoms
-
-
-requires = ['kamaki', 'python-ldap', 'Flask']
+from astavoms import __version__
 
 setup(
     name='astavoms',
-    version=astavoms.__version__,
+    version=__version__,
     description=('a minimal proxy server able to translate VOMS user '
                  'information to Synnefo/Astakos credentials, with tools.'),
     long_description=open('README.md').read(),
@@ -50,12 +46,10 @@ setup(
     download_url='',
     license='BSD',
     author='Stavros Sachtouris',
-    author_email='saxtouri@grnet.gr',
+    author_email='saxtouri@admin.grnet.gr',
     maintainer='Stavros Sachtouris',
-    maintainer_email='saxtouri@grnet.gr',
-    packages=[
-        'astavoms',
-    ],
+    maintainer_email='saxtouri@admin.grnet.gr',
+    packages=['astavoms', ],
     classifiers=[
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2.6',
@@ -72,8 +66,8 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'astavoms = astavoms:main',
+            'astavoms-server = astavoms.server:run_server',
         ]
     },
-    install_requires=requires
+    install_requires=['kamaki', 'python-ldap', 'Flask', ]
 )
