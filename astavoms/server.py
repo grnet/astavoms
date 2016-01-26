@@ -33,9 +33,12 @@
 
 import os
 import argparse
-
 from flask import Flask, request, make_response
+from astavoms.vomsdir import LDAPUser
+
 app = Flask(__name__)
+
+ASTAVOMS_SETTINGS=dict()
 
 
 @app.route('/voms2snf', methods=['POST', ])
@@ -48,13 +51,24 @@ def voms_to_snf():
         201 ACCEPTED or 202 CREATED (if a user was created)
         {uuid: ..., token: ...}
 
+    Test:
+        curl -X 'POST' localhost:5000/voms2snf -i \
+             -d '{"user_dn": "user dn", "user_vo": "user vo"}'
+
         Errors:
-            TODO 
+            TODO
     """
+    settings = app.config['ASTAVOMS_SETTINGS']
+    ldap = settings['ldap']
+    # print settings for debug purposes only
+    print settings 
+
     vo_user = request.json
+    print vo_user
     # TODO syntax check
     
     # TODO Astakos-VOMS algorithm
+    # print ldap.search_by_vo(vo_user['user_cn'], vo_user['user_vo'])
     # ok_user = ldap_get_ok_user(vo_user)
     responce_code = 201
     # if ok_user:
@@ -81,12 +95,18 @@ def run_server():
         action='store_true')
     parser.add_argument('--port',
         help='server will listen to this port', type=int)
+    parser.add_argument('--ldap-url', help='address of LDAP server')
+    parser.add_argument('--ldap-admin', help='LDAP admin user name')
+    parser.add_argument('--ldap-password', help='LDAP admin password')
     args = vars(parser.parse_args())
 
     # Environment variables
     envs = dict(
         debug=os.getenv('ASTAVOMS_SERVER_DEBUG', None),
         port=int(os.getenv('ASTAVOMS_SERVER_PORT', 0)) or None,
+        ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
+        ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
+        ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
     )
 
     # Read config file and set defaults
@@ -94,10 +114,27 @@ def run_server():
     confs = dict(
         debug=False,
         port=5000,
+        ldap_url='localhost',
+        ldap_admin='',
+        ldap_password='',
     )
 
-    # Run server
     val = lambda k: args[k] or envs[k] or confs[k]
+
+    # Set session settings
+    ldap = LDAPUser(
+        ldap_url=val('ldap_url'),
+        admin=val('ldap_admin'),
+        password=val('ldap_password'),
+        base_dn=''
+    )
+    ASTAVOMS_SETTINGS.update(dict(
+        ldap=ldap,
+    ))
+    from astavoms import server
+    app.config.from_object(server)
+
+    # Run server
     app.run(debug=val('debug'), port=val('port'))
 
 

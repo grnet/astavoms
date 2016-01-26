@@ -38,7 +38,7 @@ import ssl
 class LDAPUser:
     """An LDAP manager for VOMS users"""
 
-    def __init__(self, ldap_url, user, password, base_dn, ca_cert_file=None):
+    def __init__(self, ldap_url, admin, password, base_dn, ca_cert_file=None):
         """
         :raises ldap.LDAPError: if connection fails
         """
@@ -49,10 +49,10 @@ class LDAPUser:
             ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, ca_cert_file)
             self.con.start_tls_s()
 
-        self.user, self.password = user, password
+        self.admin, self.password = admin, password
 
     def __enter__(self):
-            self.con.simple_bind_s(self.user, self.password)
+            self.con.simple_bind_s(self.admin, self.password)
             return self
 
     def __exit__(self, type, value, traceback):
