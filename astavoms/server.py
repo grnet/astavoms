@@ -34,9 +34,11 @@
 import os
 import argparse
 from flask import Flask, request, make_response
-from astavoms.vomsdir import LDAPUser
+from astavoms.vomsdir import LDAPUser, ldap
+import logging
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
 
 ASTAVOMS_SETTINGS=dict()
 
@@ -58,18 +60,23 @@ def voms_to_snf():
         Errors:
             TODO
     """
+    logger.info('POST /voms2snf')
+    logger.debug('data: %s' % request.data)
+
     settings = app.config['ASTAVOMS_SETTINGS']
-    ldap = settings['ldap']
-    # print settings for debug purposes only
-    print settings 
+    ldaper = settings['ldaper']
+    logger.debug('settings: %s' % settings)
 
     vo_user = request.json
-    print vo_user
     # TODO syntax check
     
     # TODO Astakos-VOMS algorithm
-    # print ldap.search_by_vo(vo_user['user_cn'], vo_user['user_vo'])
-    # ok_user = ldap_get_ok_user(vo_user)
+    try:
+        ldap_user = ldaper.search_by_vo(vo_user['user_cn'], vo_user['user_vo'])
+    except ldap.NO_SUCH_OBJECT as not_found:
+        logger.info('User not found')
+        logger.debug('%s %s' % (type(not_found), not_found))
+        logger.info('Create user')
     responce_code = 201
     # if ok_user:
     #     if not ok_user['username']:
@@ -98,6 +105,7 @@ def run_server():
     parser.add_argument('--ldap-url', help='address of LDAP server')
     parser.add_argument('--ldap-admin', help='LDAP admin user name')
     parser.add_argument('--ldap-password', help='LDAP admin password')
+    parser.add_argument('--log-file', help='Full path to log file')
     args = vars(parser.parse_args())
 
     # Environment variables
@@ -107,6 +115,7 @@ def run_server():
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
         ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
+        log_file=os.getenv('ASTAVOMS_LOG_FILE', None),
     )
 
     # Read config file and set defaults
@@ -117,19 +126,36 @@ def run_server():
         ldap_url='localhost',
         ldap_admin='',
         ldap_password='',
+        log_file='astavoms.log'
     )
 
     val = lambda k: args[k] or envs[k] or confs[k]
 
+    #setup logging
+    logger.setLevel(logging.DEBUG)
+    detailed_format = logging.Formatter(
+        '%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s')
+    minimal_format = logging.Formatter('%(levelname)s: %(message)s')
+
+    file_handler = logging.FileHandler(val('log_file'))
+    file_handler.setLevel(logging.DEBUG if val('debug') else logging.INFO)
+    file_handler.setFormatter(detailed_format)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG if val('debug') else logging.ERROR)
+    console_handler.setFormatter(minimal_format)
+    logger.addHandler(console_handler)
+
     # Set session settings
-    ldap = LDAPUser(
+    ldaper = LDAPUser(
         ldap_url=val('ldap_url'),
         admin=val('ldap_admin'),
         password=val('ldap_password'),
         base_dn=''
     )
     ASTAVOMS_SETTINGS.update(dict(
-        ldap=ldap,
+        ldaper=ldaper,
     ))
     from astavoms import server
     app.config.from_object(server)
