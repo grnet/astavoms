@@ -100,6 +100,7 @@ def run_server():
     parser.add_argument('--debug',
         help='debug details may be sensitive, do not use in production',
         action='store_true')
+    parser.add_argument('--host', help='IP or domain name for server')
     parser.add_argument('--port',
         help='server will listen to this port', type=int)
     parser.add_argument('--ldap-url', help='address of LDAP server')
@@ -111,6 +112,7 @@ def run_server():
     # Environment variables
     envs = dict(
         debug=os.getenv('ASTAVOMS_SERVER_DEBUG', None),
+        host=int(os.getenv('ASTAVOMS_SERVER_HOST', 0)) or None,
         port=int(os.getenv('ASTAVOMS_SERVER_PORT', 0)) or None,
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
@@ -122,8 +124,9 @@ def run_server():
     # TODO manage config file
     confs = dict(
         debug=False,
+        host='localhost',
         port=5000,
-        ldap_url='localhost',
+        ldap_url='ldap://localhost',
         ldap_admin='',
         ldap_password='',
         log_file='astavoms.log'
@@ -161,7 +164,7 @@ def run_server():
     app.config.from_object(server)
 
     # Run server
-    app.run(debug=val('debug'), port=val('port'))
+    app.run(debug=val('debug'), host=val('host'), port=val('port'))
 
 
 # For testing
