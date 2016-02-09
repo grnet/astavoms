@@ -20,7 +20,7 @@ credentials, e.g.:
 >   X-Auth-Token: Trusted-client-token
 >   Content-Type: application/json
 >
-> {"user_dn": "/C=org/O=example/CN=Tyler Durden", "user_vo": "example"}
+> {"cn": "/C=org/O=example/CN=Tyler Durden", "vo": "example"}
 
 < 202 ACCEPTED
 < 
