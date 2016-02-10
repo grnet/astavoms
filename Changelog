@@ -13,3 +13,6 @@ Imlement a class IndentityClient with the following methods:
 * deactivate_user
 * renew_user_token
 
+v0.3
+====
+Implement a simple and minimal REST API
