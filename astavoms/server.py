@@ -35,10 +35,10 @@ import os
 import argparse
 from flask import Flask, request, make_response, jsonify
 from astavoms.vomsdir import LDAPUser, ldap
-import logging
+from astavoms import utils
 
 app = Flask(__name__)
-logger = logging.getLogger(__name__)
+logger = utils.logging.getLogger(__name__)
 
 ASTAVOMS_SETTINGS=dict()
 
@@ -183,21 +183,7 @@ def run_server():
 
     val = lambda k: args[k] or envs[k] or confs[k]
 
-    #setup logging
-    logger.setLevel(logging.DEBUG)
-    detailed_format = logging.Formatter(
-        '%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s')
-    minimal_format = logging.Formatter('%(levelname)s: %(message)s')
-
-    file_handler = logging.FileHandler(val('log_file'))
-    file_handler.setLevel(logging.DEBUG if val('debug') else logging.INFO)
-    file_handler.setFormatter(detailed_format)
-    logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG if val('debug') else logging.ERROR)
-    console_handler.setFormatter(minimal_format)
-    logger.addHandler(console_handler)
+    utils.setup_logger(logger, debug=val('debug'), log_file=val('log_file'))
 
     # Set session settings
     # ldaper = LDAPUser(
