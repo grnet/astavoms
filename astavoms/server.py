@@ -31,8 +31,6 @@
 # interpreted as representing official policies, either expressed
 # or implied, of GRNET S.A.
 
-import os
-import argparse
 from flask import Flask, request, make_response, jsonify
 from astavoms.vomsdir import LDAPUser, ldap
 from astavoms import utils
@@ -140,68 +138,3 @@ def voms_to_snf():
 
     response_data = dict(uuid='sample uuid', token='sample token')
     return make_response(jsonify(response_data), responce_code)
-
-
-def run_server():
-    """Script that starts the server"""
-    # CLI arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--debug',
-        help='debug details may be sensitive, do not use in production',
-        action='store_true')
-    parser.add_argument('--host', help='IP or domain name for server')
-    parser.add_argument('--port',
-        help='server will listen to this port', type=int)
-    parser.add_argument('--ldap-url', help='address of LDAP server')
-    parser.add_argument('--ldap-admin', help='LDAP admin user name')
-    parser.add_argument('--ldap-password', help='LDAP admin password')
-    parser.add_argument('--log-file', help='Full path to log file')
-    args = vars(parser.parse_args())
-
-    # Environment variables
-    envs = dict(
-        debug=os.getenv('ASTAVOMS_SERVER_DEBUG', None),
-        host=int(os.getenv('ASTAVOMS_SERVER_HOST', 0)) or None,
-        port=int(os.getenv('ASTAVOMS_SERVER_PORT', 0)) or None,
-        ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
-        ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
-        ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
-        log_file=os.getenv('ASTAVOMS_LOG_FILE', None),
-    )
-
-    # Read config file and set defaults
-    # TODO manage config file
-    confs = dict(
-        debug=False,
-        host='localhost',
-        port=5000,
-        ldap_url='ldap://localhost',
-        ldap_admin='',
-        ldap_password='',
-        log_file='astavoms.log'
-    )
-
-    val = lambda k: args[k] or envs[k] or confs[k]
-
-    utils.setup_logger(logger, debug=val('debug'), log_file=val('log_file'))
-
-    # Set session settings
-    # ldaper = LDAPUser(
-    #     ldap_url=val('ldap_url'),
-    #     admin=val('ldap_admin'),
-    #     password=val('ldap_password'),
-    #     base_dn=''
-    # )
-    # ASTAVOMS_SETTINGS.update(dict(
-    #     ldaper=ldaper,
-    # ))
-    from astavoms import server
-    app.config.from_object(server)
-
-    # Run server
-    app.run(debug=val('debug'), host=val('host'), port=val('port'))
-
-
-# For testing
-if __name__ == '__main__':
-    run_server()

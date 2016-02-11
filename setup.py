@@ -66,7 +66,7 @@ setup(
     include_package_data=True,
     entry_points={
         'console_scripts': [
-            'astavoms-server = astavoms.server:run_server',
+            'astavoms-server = astavoms.daemon:cli',
         ]
     },
     install_requires=['kamaki', 'python-ldap', 'Flask', ]
