@@ -39,14 +39,11 @@ from signal import SIGTERM
 
 from astavoms import server, utils
 
-# pidfile = '/var/run/astavoms-server.pid'
-pidfile = '/tmp/astavoms-server.pid'
-logfile = '/tmp/astavoms-server.log'
 logger = utils.logging.getLogger(__name__)
-app_kw = dict()
+ASTAVOMS_SERVER_SETTINGS = dict()
 
 
-def daemon():
+def daemon(pidfile, logfile):
     """Create a daemon process detached from the CLI process"""
     logger.info("Start daemon")
     if os.path.exists(pidfile):
@@ -56,7 +53,7 @@ def daemon():
     try:
         pid = os.fork()
         if pid > 0:
-            sys.stderr.write("Started\n")
+            sys.stderr.write("started\n")
             sys.exit(0)
     except OSError as e:
         import traceback
@@ -75,10 +72,10 @@ def daemon():
     logger.info("Daemon is running")
 
 
-def status(args=None):
+def status(settings):
     """Report if daemon is running"""
     try:
-        with open(pidfile) as f:
+        with open(settings['pidfile']) as f:
             pid = int(f.read().strip())
         os.kill(int(pid), 0)
         sys.stdout.write('Running ( pid: %s )\n' % pid)
@@ -89,29 +86,34 @@ def status(args=None):
         logger.debug(oee)
         sys.stdout.write(
             "Process %s not running, althought file %s exists\n" % (
-                pid, pidfile))
+                pid, settings['pidfile']))
     except IOError as ioe:
         logger.debug(ioe)
         sys.stdout.write("Stopped\n")
 
 
-def run():
-    """Run the service with app_kw arguments"""
+def run(settings):
+    """Run the service"""
+    server.ASTAVOMS_SERVER_SETTINGS.update(settings)
     server.app.config.from_object(server)
-    server.app.run(**app_kw)
+    utils.setup_logger(
+        server.logger,
+        debug=settings['debug'], logfile=settings['logfile'])
+    server.app.run(host=settings.get('host'), port=settings.get('port'))
 
 
-def start(args=None):
+def start(settings):
     """Start the daemon and run"""
-    sys.stderr.write("Starting...\n")
-    daemon()
-    run()
+    sys.stderr.write("Starting ... ")
+    daemon(pidfile=settings['pidfile'], logfile=settings['logfile'])
+    run(settings)
 
 
-def stop(args=None):
+def stop(settings):
     """Stop the daemon"""
     sys.stderr.write("Stopping ... ")
     logger.info("Stop the daemon")
+    pidfile = settings['pidfile']
     try:
         with open(pidfile, 'r') as f:
             pid = int(f.read().strip())
@@ -131,30 +133,33 @@ def cli():
     parser = argparse.ArgumentParser()
 
     sp = parser.add_subparsers()
-    sp_start = sp.add_parser('start', help='Starts %(prog)s daemon')
-    sp_start.set_defaults(func=start)
+    parser.add_argument(
+        '--debug', help='log in debug mode', action='store_true')
+    parser.add_argument('--logfile', help='Full path to log file')
+    parser.add_argument('--pidfile', help='Many pidfiles: multiple daemons')
 
-    sp_start.add_argument('--debug',
-        help='debug details may be sensitive, do not use in production',
-        action='store_true')
+    sp_start = sp.add_parser('start', help='Starts %(prog)s daemon')
+    sp_start.set_defaults(func=start, cmd='start')
     sp_start.add_argument('--host', help='IP or domain name for server')
     sp_start.add_argument('--port',
         help='server will listen to this port', type=int)
     sp_start.add_argument('--ldap-url', help='address of LDAP server')
     sp_start.add_argument('--ldap-admin', help='LDAP admin user name')
     sp_start.add_argument('--ldap-password', help='LDAP admin password')
-    sp_start.add_argument('--log-file', help='Full path to log file')
 
     sp_stop = sp.add_parser('stop',help='Stop %(prog)s daemon')
-    sp_stop.set_defaults(func=stop)
+    sp_stop.set_defaults(func=stop, cmd='stop')
+
+    sp_restart = sp.add_parser('restart',help='Restart %(prog)s daemon')
+    sp_restart.set_defaults(func=restart, cmd='restart')
 
     sp_status = sp.add_parser(
         'status', help='Report the status of %(prog)s daemon')
-    sp_status.set_defaults(func=status)
+    sp_status.set_defaults(func=status, cmd='status')
 
     pargs = parser.parse_args()
-    pargs.func(pargs)
-    args = vars(pargs)
+    args = vars(parser.parse_args([pargs.cmd]))
+    args.update(vars(pargs))
 
     # Environment variables
     envs = dict(
@@ -164,7 +169,8 @@ def cli():
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
         ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
-        log_file=os.getenv('ASTAVOMS_LOG_FILE', None),
+        logfile=os.getenv('ASTAVOMS_LOGFILE', None),
+        pidfile=os.getenv('ASTAVOMS_PIDFILE', None)
     )
 
     # Read config file and set defaults
@@ -176,12 +182,13 @@ def cli():
         ldap_url='ldap://localhost',
         ldap_admin='',
         ldap_password='',
-        log_file='/tmp/astavoms-server.log'
+        logfile='/var/run/astavoms-server.log',
+        pidfile = '/var/run/astavoms-server.pid',
     )
 
     val = lambda k: args.get(k) or envs[k] or confs[k]
-
-    utils.setup_logger(logger, debug=val('debug'), log_file=val('log_file'))
+    utils.setup_logger(logger, debug=val('debug'), logfile=val('logfile'))
+    settings = {k: val(k) for k in confs.keys()}
 
     # Set session settings
     # ldaper = LDAPUser(
@@ -195,8 +202,7 @@ def cli():
     # ))
 
     # Run server
-    for k in ('debug', 'host', 'port'):
-        app_kw[k] = val(k)
+    pargs.func(settings)
 
 
 # For testing

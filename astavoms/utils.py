@@ -34,25 +34,26 @@
 import logging
 
 
-def setup_logger(logger, debug=False, log_file=None, use_console=None):
+def setup_logger(given_logger, debug=False, logfile=None, use_console=None):
     """Create a stream logger and, optionally, a file logger
-    :param name: (str) the logger name
+    :param given_logger: (str) the logger to setup
     :param debug: (bool) whether the logger will be set in INFO or DEBUG mode
-    :param log_file: (str) path to the log file, will not log in file if None
+    :param logfile: (str) path to the log file, will not log in file if None
+    :param use_console: (bool) whether to print logs to console
     """
-    logger.setLevel(logging.DEBUG)
+    given_logger.setLevel(logging.DEBUG)
     detailed_format = logging.Formatter(
         '%(asctime)s %(name)s:%(lineno)d %(levelname)s %(message)s')
     minimal_format = logging.Formatter('%(levelname)s: %(message)s')
 
-    if log_file:
-        file_handler = logging.FileHandler(log_file)
+    if logfile:
+        file_handler = logging.FileHandler(logfile)
         file_handler.setLevel(logging.DEBUG if debug else logging.INFO)
         file_handler.setFormatter(detailed_format)
-        logger.addHandler(file_handler)
+        given_logger.addHandler(file_handler)
 
-    if use_console or not log_file:
+    if use_console or not logfile:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG if debug else logging.ERROR)
         console_handler.setFormatter(minimal_format)
-        logger.addHandler(console_handler)
+        given_logger.addHandler(console_handler)

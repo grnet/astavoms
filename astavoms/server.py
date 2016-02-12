@@ -38,7 +38,7 @@ from astavoms import utils
 app = Flask(__name__)
 logger = utils.logging.getLogger(__name__)
 
-ASTAVOMS_SETTINGS=dict()
+ASTAVOMS_SERVER_SETTINGS=dict()
 
 
 class AstavomsRESTError(Exception):
@@ -113,9 +113,10 @@ def voms_to_snf():
             raise AstavomsInvalidInput("Missing '%s' from input" % key)
 
     # Load settings
-    settings = app.config['ASTAVOMS_SETTINGS']
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
     # ldaper = settings['ldaper']
     logger.debug('settings: %s' % settings)
+    logger.info("settings: %s" % settings)
     
     # TODO Astakos-VOMS algorithm
     # try:
@@ -138,3 +139,15 @@ def voms_to_snf():
 
     response_data = dict(uuid='sample uuid', token='sample token')
     return make_response(jsonify(response_data), responce_code)
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', help='unsafe', action='store_true')
+    parser.add_argument('--host', help='IP or fqdn')
+    parser.add_argument('--port', help='port', type=int)
+    args = parser.parse_args()
+    app.config.from_object(__name__)
+    app.run(debug=args.debug, host=args.host, port=args.port)
+
