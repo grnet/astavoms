@@ -49,7 +49,7 @@ setup(
     author_email='saxtouri@admin.grnet.gr',
     maintainer='Stavros Sachtouris',
     maintainer_email='saxtouri@admin.grnet.gr',
-    packages=['astavoms', ],
+    packages=['astavoms', 'astavoms.authvoms'],
     classifiers=[
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 2.6',
@@ -69,5 +69,6 @@ setup(
             'astavoms-server = astavoms.daemon:cli',
         ]
     },
-    install_requires=['kamaki', 'python-ldap', 'Flask', ]
+    install_requires=['kamaki', 'python-ldap', 'Flask', 'M2Crypto', ]
+    # apt-get install libvomsapi1 ///swig
 )

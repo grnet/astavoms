@@ -8,6 +8,7 @@ Install and deploy
 ------------------
 
 TODO
+apt-get install build-essential libsasl2-dev python-dev libldap2-dev libssl-dev swig libvomsapi1
 
 Using the server
 ----------------
