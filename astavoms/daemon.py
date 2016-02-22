@@ -127,6 +127,11 @@ def stop(settings):
         logger.debug("Failed to stop daemon: %s" % e)
         sys.stderr.write('\n\t%s\n' % e)
 
+def restart(settings):
+    """Restart the daemon"""
+    stop(settings)
+    start(settings)
+
 
 def cli():
     """Script that starts the server"""
