@@ -113,8 +113,8 @@ def voms_to_snf():
             raise AstavomsInvalidInput("Missing '%s' from input" % key)
 
     # Load settings
-    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
-    # ldaper = settings['ldaper']
+    settings = app.config['ASTAVOMS_SETTINGS']
+    ldap_args = settings['ldap_args']
     logger.debug('settings: %s' % settings)
     logger.info("settings: %s" % settings)
     
