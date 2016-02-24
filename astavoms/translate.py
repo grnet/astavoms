@@ -1,4 +1,4 @@
-# Copyright 2015 GRNET S.A. All rights reserved.
+# Copyright 2015-2016 GRNET S.A. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or
 # without modification, are permitted provided that the following
@@ -32,7 +32,7 @@
 # or implied, of GRNET S.A.
 
 from kamaki.clients import ClientError
-from astavoms import vomsdir, identity
+from astavoms import ldapuser, identity
 from inspect import getmembers, ismethod
 
 
@@ -48,7 +48,7 @@ class SnfOcciUsers(object):
         self.snf_admin_id = self.snf_admin.user_info['id']
         self.ldap_conf = dict(
             ldap_url=ldap_url,
-            user=ldap_user, password=ldap_password,
+            admin=ldap_user, password=ldap_password,
             base_dn=base_dn,
             ca_cert_file=ca_cert_file)
 
@@ -77,7 +77,7 @@ class SnfOcciUsers(object):
         :raises KeyError: if not in LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
-        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
+        with ldapuser.LDAPUser(**self.ldap_conf) as ldap_user:
             return ldap_user.search_by_vo(cn, vo)[dn]
 
     def cache_user(self, uuid, email, token, dn, vo, cert=None):
@@ -85,8 +85,8 @@ class SnfOcciUsers(object):
         :returns: (dict) updated user info from LDAP
         """
         cn = self.dn_to_dict(dn)['CN']
-        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
-            ldap_user.create(uuid, cn, email, token, vo, dn, cert)
+        with ldapuser.LDAPUser(**self.ldap_conf) as ldap_user:
+            ldap_user.create(uuid, token, email, cn, vo, dn, cert)
             return self.get_cached_user(dn, vo)
 
     def vo_to_project(self, vo):
@@ -146,7 +146,7 @@ class SnfOcciUsers(object):
                     print 'Renew token and retry %s.%s(...)' % (
                         cls.__name__, name)
                     user = self.snf_admin.renew_user_token(user_id)
-                    with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
+                    with ldapuser.LDAPUser(**self.ldap_conf) as ldap_user:
                         ldap_user.update_token(user['id'], user['auth_token'])
                     cls.token = user['auth_token']
                     return method(*args, **kwargs)
@@ -159,7 +159,7 @@ class SnfOcciUsers(object):
         :returns: uuid
         :raises KeyError: if token not found
         """
-        with vomsdir.LDAPUser(**self.ldap_conf) as ldap_user:
-            r = ldap_user.search_by_token(token, ['uuid', ])
+        with ldapuser.LDAPUser(**self.ldap_conf) as ldap_user:
+            r = ldap_user.search_by_token(token, ['uid', ])
             return r.values()[0]['uid']
 

@@ -32,11 +32,11 @@
 # or implied, of GRNET S.A.
 
 from flask import Flask, request, make_response, jsonify
-from astavoms.vomsdir import LDAPUser, ldap
-from astavoms import utils
+from astavoms.ldapuser import LDAPUser, ldap
+import logging
 
 app = Flask(__name__)
-logger = utils.logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 ASTAVOMS_SERVER_SETTINGS=dict()
 
@@ -141,6 +141,7 @@ def voms_to_snf():
     return make_response(jsonify(response_data), responce_code)
 
 
+# For testing
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
