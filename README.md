@@ -7,8 +7,21 @@ Synnefo/Astakos credentials.
 Install and deploy
 ------------------
 
-TODO
-apt-get install build-essential libsasl2-dev python-dev libldap2-dev libssl-dev swig libvomsapi1
+Assuming a debian-like system, the following packages are required:
+
+```
+// For python-ldap
+# apt-get install build-essential libsasl2-dev python-dev libldap2-dev libssl-dev
+
+// For M2Crypto
+# apt-get install swig
+
+// For voms_helper
+# apt-get install libvomsapi1
+```
+
+TODO: Setting up the system for VOMS authentication
+
 
 Using the server
 ----------------
