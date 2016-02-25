@@ -80,11 +80,11 @@ Synnefo/EGI applications.
 
 .. rubric:: VO user to Synnefo user
 
-========================== ====== =============
+========================== ====== =================
 Description                Method Endpoint
-========================== ====== =============
-`Get Synnefo credentials`_ POST   ``/voms2snf``
-========================== ====== =============
+========================== ====== =================
+`Get Synnefo credentials`_ POST   ``/authenticate``
+========================== ====== =================
 
 |
 ==============  ================
@@ -103,15 +103,31 @@ Content-type    application/json
 Request data::
 
 	{
-		"cn": <VO user certified name>,
-		"vo": <Virtual Organization>
+		"dn": <User DN>,
+		"cert": <User PEM certificate>,
+		"chain": <PEM chain>
 	}
 
 
 Response data::
 
 	{
-		"uuid": <Synnefo user uuid>,
-		"token": <Synnefo user token>,
-		"project": <Project ID to be used for resource allocation>
+        "snf:uuid": <Synnefo user UUID>,
+        "snf:token": <Synnefo user token>,
+        "snf:project": <Synnefo Project ID>,
+        "mail": <user e-mail>,
+        "serverca": <VOMS server CA>,
+        "voname": <VO name>,
+        "uri": <VO URI>,
+        "server": <VO server>,
+        "version": <OCCI version>,
+        "user": <User description>,
+        "userca": <User CA>,
+        "serial": <User serial>,
+        "fqans": [...],
+        "not_after": <Date (see OCCI)>,
+        "not_before": <Date (see OCCI)>
 	}
+
+.. note:: All response data is produced by VOMS resolution, except from
+	Synnefo-related information, which is prefixed with 'snf:'

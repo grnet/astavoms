@@ -30,17 +30,20 @@ The proxy server is given VOMS user information and returns Synnefo/Astakos
 credentials, e.g.:
 
 ```
-> POST https://astavoms.host:5000/voms2snf
+> POST https://astavoms.host:5000/authenticate
 >   X-Auth-Token: Trusted-client-token
 >   Content-Type: application/json
 >
-> {"cn": "/C=org/O=example/CN=Tyler Durden", "vo": "example"}
+> {"dn": ..., "cert": ..., "chain": ...}
 
 < 202 ACCEPTED
 < 
 < {
-<    "uuid": "the-synnefo-astakos-user-uuid",
-<    "token": "the-synnefo-astakos-user-token"
+<	"snf:uuid": ..., "snf:token": ..., "snf:project": ...,
+<	"mail": ..., "serverca": ..., "voname": ...,
+<	"uri": ..., "server": ..., "version": ...,
+<	"user": ..., "userca": ..., "serial": ...,
+<	"fqans": [...], "not_after": ..., "not_before": ...
 < }
 ```
 

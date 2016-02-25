@@ -32,7 +32,6 @@
 # or implied, of GRNET S.A.
 
 from flask import Flask, request, make_response, jsonify
-from astavoms.ldapuser import LDAPUser, ldap
 import logging
 
 app = Flask(__name__)
@@ -45,14 +44,14 @@ class AstavomsRESTError(Exception):
     """Template class for Astavoms errors"""
     status_code = None # Must be set
 
-    def __init__(self, message, status_code=None, payload=None):
+    def __init__(self, message=None, status_code=None, payload=None):
         """ Add some context to the error
             :param message: a user friendly message
             :param status_code: REST status code
             :param payload: (dict) some context for the error
         """
         Exception.__init__(self)
-        self.message = message
+        self.message = message or self.__doc__
         if status_code is not None:
             self.status_code = status_code
         self.payload = payload
@@ -82,35 +81,52 @@ def handle_invalid_usage(error):
     return response
 
 
-@app.route('/voms2snf', methods=['POST', ])
-def voms_to_snf():
-    """POST /voms2snf
-        X-Auth-Token: ...
-        {cn: ..., vo: ...}
+def _check_request_data(voms_credentials):
+    """Check voms_to_snf request data and raise appropriate errors
+    :param voms_credentials: (dict) {"dn": ..., "cert": ..., "chain": ...}
+    :raises AstavomsInputIsMissing: if no voms_credentials
+    :raises astavomsInvalidInput: if voms_credentials is invalid
+    """
+    if not voms_credentials:
+        raise AstavomsInputIsMissing()
+    expected_keys = ('dn', 'cert', 'chain')
+    missing = set(expected_keys) - set(voms_credentials)
+    unexpected = set(voms_credentials) - set(expected_keys)
+    err_msg, payload = 'Input ', dict()
+    if missing:
+        err_msg += "is missing keys"
+        payload['missing'] = tuple(missing)
+    if unexpected:
+        err_msg += (' and ' if missing else '') + 'contains unexpected keys'
+        payload['unexpected'] = tuple(unexpected)
+    if missing or unexpected:
+        raise AstavomsInvalidInput(err_msg, payload=payload)
+
+
+@app.route('/authenticate', methods=['POST', ])
+def authenticate():
+    """POST /authenticate
+        X-Auth-Token: <token for authorized snf-EGI application>
+        {"dn": ..., "cert": ..., "chain": ...}
 
         Response:
-        201 ACCEPTED or 202 CREATED (if a user was created)
-        {uuid: ..., token: ...}
-
-    Test:
-        curl -X 'POST' localhost:5000/voms2snf -i \
-             -d '{"cn": "user cn", "vo": "user vo"}'
+        201 ACCEPTED or 202 CREATED (if a snf-user was just created)
+        {
+            "snf:uuid": ..., "snf:token": ..., "snf:project": ...,
+            "mail": ..., "serverca": ..., "voname": ...,
+            "uri": ..., "server": ..., "version": ...,
+            "user": ..., "userca": ..., "serial": ...,
+            "fqans": [...], "not_after": ..., "not_before": ...
+        }
 
         Errors:
             TODO
     """
-    logger.info('POST /voms2snf')
+    logger.info('POST /authenticate')
     logger.debug('data: %s' % request.data)
 
-    # Check input
-    vo_user = request.json if request.data else None
-    if not vo_user:
-        raise AstavomsInputIsMissing("Request input is missing")
-    expected_keys = ('cn', 'vo')
-    unexpected_keys =  (expected_keys)
-    for key in expected_keys:
-        if key not in vo_user:
-            raise AstavomsInvalidInput("Missing '%s' from input" % key)
+    voms_credentials = request.json if request.data else None
+    _check_request_data(voms_credentials)
 
     # Load settings
     settings = app.config['ASTAVOMS_SETTINGS']
@@ -118,25 +134,22 @@ def voms_to_snf():
     logger.debug('settings: %s' % settings)
     logger.info("settings: %s" % settings)
     
-    # TODO Astakos-VOMS algorithm
-    # try:
-    #     ldap_user = ldaper.search_by_vo(vo_user['cn'], vo_user['vo'])
-    # except ldap.NO_SUCH_OBJECT as not_found:
-    #     logger.info('User not found')
-    #     logger.debug('%s %s' % (type(not_found), not_found))
-    #     logger.info('Create user')
-    responce_code = 201
-    # if ok_user:
-    #     if not ok_user['username']:
-    #         ok_user = astavoms_create_user(vo_user)
-    #         ldap_update(vo_user, ok_user)
-    #         response_code = 202
-    #     elif not astakos.check_token(ok_user):
-    #         ok_user = astakos.update_token(ok_user)
-    #         ldap_update(vo_user, ok_user)
-    # if not ok_user:
-    #     raise USER NOT FOUND or something
+    # VOMS authentication
+    #   VOMSAuth must be set in server setup, not here
+    #   Get VOMSAuth from Settings
+    #   voms_user = VOMSAuth().get_voms_info()
+    # LDAP query
+    #   with LDAPUser(**ldap_args) as ldap_user:
+    #       ...
+    # Synnefo authentication
+    #   astakos.authenticate(...)
+    # Update LDAP
+    #   with LDAPUser(**ldap_args) as ldap_user:
+    #       ...
+    # Respond
+    #   ...
 
+    responce_code = 201
     response_data = dict(uuid='sample uuid', token='sample token')
     return make_response(jsonify(response_data), responce_code)
 
