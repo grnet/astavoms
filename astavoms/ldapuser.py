@@ -69,11 +69,11 @@ class LDAPUser:
         query = '(&(objectclass=person)(uid=%s))' % snf_uuid
         return dict(self._search(query, attrlist))
 
-    def search_by_voms(self, cn, vo, attrlist=[]):
+    def search_by_voms(self, dn, vo, attrlist=[]):
         """
         :return: (dict) of the form dict(dn={...})
         """
-        query = '(&(objectclass=person)(cn=%s)(sn=%s))' % (cn, vo)
+        query = '(&(objectclass=person)(givenName=%s)(sn=%s))' % (dn, vo)
         return self._search(query, attrlist)
 
     def search_by_snf_token(self, snf_token, attrlist=[]):

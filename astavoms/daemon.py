@@ -37,10 +37,9 @@ import logging
 import argparse
 from signal import SIGTERM
 
-from astavoms import server, utils
+from astavoms import server, utils, authvoms, identity
 
 logger = utils.logging.getLogger(__name__)
-ASTAVOMS_SERVER_SETTINGS = dict()
 
 
 def daemon(pidfile, logfile):
@@ -94,7 +93,22 @@ def status(settings):
 
 def run(settings):
     """Run the service"""
-    server.ASTAVOMS_SERVER_SETTINGS.update(settings)
+    ldap_args = dict(
+        ldap_url=settings.get('ldap_url'),
+        admin=settings.get('ldap_admin'),
+        ldap_password=settings.get('ldap_password'),
+        base_dn=settings.get('ldap_base_dn')
+    )
+    voms_args = dict([(k, v) for k, v in settings.items() if k in (
+        'voms_policy', 'voms_dir', 'ca_path', 'voms_api_lib')])
+    snf_admin = identity.IdentityClient(
+        settings['snf_auth_url'], settings['snf_admin_token'])
+
+    server.ASTAVOMS_SERVER_SETTINGS.update(dict(
+        ldap_args=ldap_args,
+        vomsauth=authvoms.VomsAuth(**voms_args),
+        snf_admin=snf_admin
+    ))
     server.app.config.from_object(server)
     utils.setup_logger(
         server.logger,
@@ -151,6 +165,8 @@ def cli():
     sp_start.add_argument('--ldap-url', help='address of LDAP server')
     sp_start.add_argument('--ldap-admin', help='LDAP admin user name')
     sp_start.add_argument('--ldap-password', help='LDAP admin password')
+    sp_start.add_argument('--snf-auth-url', help='Synnefo Authentication URL')
+    sp_start.add_argument('--snf-admin-token', help='Synnefo admin token')
 
     sp_stop = sp.add_parser('stop',help='Stop %(prog)s daemon')
     sp_stop.set_defaults(func=stop, cmd='stop')
@@ -174,6 +190,9 @@ def cli():
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
         ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
+        ldap_base_dn=os.getenv('ASTAVOMS_LDAP_BASE_DN', None),
+        snf_auth_url=os.getenv('ASTAVOMS_SNF_AUTH_URL', None),
+        snf_admin_token=os.getenv('ASTAVOMS_SNF_ADMIN_TOKEN', None),
         logfile=os.getenv('ASTAVOMS_LOGFILE', None),
         pidfile=os.getenv('ASTAVOMS_PIDFILE', None)
     )
@@ -185,8 +204,8 @@ def cli():
         host='localhost',
         port=5000,
         ldap_url='ldap://localhost',
-        ldap_admin='',
-        ldap_password='',
+        ldap_admin='', ldap_password='', ldap_base_dn='',
+        snf_auth_url='', snf_admin_token='',
         logfile='/var/run/astavoms-server.log',
         pidfile = '/var/run/astavoms-server.pid',
     )
@@ -194,17 +213,6 @@ def cli():
     val = lambda k: args.get(k) or envs[k] or confs[k]
     utils.setup_logger(logger, debug=val('debug'), logfile=val('logfile'))
     settings = {k: val(k) for k in confs.keys()}
-
-    # Set session settings
-    # ldaper = LDAPUser(
-    #     ldap_url=val('ldap_url'),
-    #     admin=val('ldap_admin'),
-    #     password=val('ldap_password'),
-    #     base_dn=''
-    # )
-    # ASTAVOMS_SETTINGS.update(dict(
-    #     ldaper=ldaper,
-    # ))
 
     # Run server
     pargs.func(settings)

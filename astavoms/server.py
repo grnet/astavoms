@@ -34,6 +34,8 @@
 from flask import Flask, request, make_response, jsonify
 import logging
 
+from astavoms.authvoms import M2Crypto
+
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
@@ -72,9 +74,14 @@ class AstavomsInvalidInput(AstavomsRESTError):
     """Input is missing some elements"""
     status_code = 400 # Bad request
 
+class AstavomsUnauthorizedVOMS(AstavomsRESTError):
+    """VOMS Authentication Failed"""
+    status_code = 401 # Unauthorized
+
 
 @app.errorhandler(AstavomsInputIsMissing)
 @app.errorhandler(AstavomsInvalidInput)
+@app.errorhandler(AstavomsUnauthorizedVOMS)
 def handle_invalid_usage(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
@@ -103,6 +110,17 @@ def _check_request_data(voms_credentials):
         raise AstavomsInvalidInput(err_msg, payload=payload)
 
 
+dn_to_cn = lambda dn: dn.split('/')[-1].split('=')[-1]
+snf_to_user = lambda snf_user, dn, vo, snf_token: dict(
+    uid=snf_user['id'],
+    userPassword=snf_token,
+    sn=vo,
+    mail=snf_user['email'],
+    givenName=dn,
+    cn=dn_to_cn(dn)
+)
+
+
 @app.route('/authenticate', methods=['POST', ])
 def authenticate():
     """POST /authenticate
@@ -125,32 +143,74 @@ def authenticate():
     logger.info('POST /authenticate')
     logger.debug('data: %s' % request.data)
 
+    logger.info('Get VOMS credentials')
     voms_credentials = request.json if request.data else None
     _check_request_data(voms_credentials)
 
-    # Load settings
-    settings = app.config['ASTAVOMS_SETTINGS']
-    ldap_args = settings['ldap_args']
+    logger.info('Load settings')
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
     logger.debug('settings: %s' % settings)
-    logger.info("settings: %s" % settings)
     
-    # VOMS authentication
-    #   VOMSAuth must be set in server setup, not here
-    #   Get VOMSAuth from Settings
-    #   voms_user = VOMSAuth().get_voms_info()
-    # LDAP query
-    #   with LDAPUser(**ldap_args) as ldap_user:
-    #       ...
-    # Synnefo authentication
-    #   astakos.authenticate(...)
-    # Update LDAP
-    #   with LDAPUser(**ldap_args) as ldap_user:
-    #       ...
-    # Respond
-    #   ...
+    logger.info('Authenticate VOMS user')
+    vomsauth = settings['vomsauth']
+    cert, chain = voms_credentials['cert'], voms_credentials['chain']
+    try:
+        voms_user = vomsauth.get_voms_info(cert, chain)
+    except M2Crypto.X509.X509Error as e:
+        logger.debug('VOMS authentication failed: %s' % e)
+        raise AstavomsUnauthorizedVOMS()
+    logger.debug('VOMS user: %s' % voms_user)
 
+    logger.info('Get Synnefo admin client')
+    snf_admin = settings['snf_admin']
     responce_code = 201
-    response_data = dict(uuid='sample uuid', token='sample token')
+
+    logger.info('Connect to LDAP directory')
+    ldap_args = settings['ldap_args']
+    with LDAPUser(**ldap_args) as ldap_user:
+        logger.info('Make sure user exists in LDAP')
+        dn, vo = voms_user['user'], voms_user['voname']
+        user = ldap_user.search_by_voms(dn, vo)
+
+        if not user:
+            logger.info('No such user in LDAP, look up in Synnefo')
+
+            snf_uuid = astakos.usernames2uuids([dn, ]).get('username', None)
+            snf_token = None
+            if not snf_uuid:
+                logger.info('No Synnefo user, create a new one')
+                name = dn_to_cn(dn).split(' ')
+                first_name, last_name = name[0], ' '.join(name[1:])
+                created = snf_admin.create_user(
+                    username=dn,
+                    first_name=first_name,
+                    last_name=last_name,
+                    affiliation=vo
+                )
+                snf_uuid, snf_token = created['id'], created['auth_token']
+                responce_code = 202
+
+            logger.info('User exists in Synnefo, retrieve & refresh token')
+            snf_user = snf_admin.get_user_details(snf_uuid)
+            snf_token = snf_token or snf_admin.renew_user_token(snf_uuid)
+            logger.debug('Synnefo user: %s' % snf_user)
+
+            logger.info('Store user in LDAP')
+            user = snf_to_user(snf_user, dn, vo, snf_token)
+            ldap_user.create(
+                snf_uuid=snf_uuid, mail=user['mail'], snf_token=snf_token,
+                cn=dn_to_cn(dn), vo=vo, user_dn =dn)
+        else:
+            logger.info('Authenticate Synnefo user')
+            if not snf_admin.authenticate(user['snf_token']):
+                logger.info('Authentication failed, refresh Synnefo token')
+                snf_token = snf_admin.renew_user_token(snf_uuid)
+                user['userPassword'] = snf_token
+                ldap_user.update_snf_token(user['uid'], user['userPassword'])
+
+        logger.debug('User: %s' % user)
+
+    response_data = get_response_dict(user, voms_user)
     return make_response(jsonify(response_data), responce_code)
 
 
