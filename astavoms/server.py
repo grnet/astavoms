@@ -144,7 +144,11 @@ def authenticate():
     logger.debug('data: %s' % request.data)
 
     logger.info('Get VOMS credentials')
-    voms_credentials = request.json if request.data else None
+    try:
+        voms_credentials = request.json if request.data else None
+    except Exception as e:
+        logger.debug(e)
+        raise
     _check_request_data(voms_credentials)
 
     logger.info('Load settings')

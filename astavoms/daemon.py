@@ -35,6 +35,7 @@ import os
 import sys
 import logging
 import argparse
+import json
 from signal import SIGTERM
 
 from astavoms import server, utils, authvoms, identity
@@ -156,6 +157,7 @@ def cli():
         '--debug', help='log in debug mode', action='store_true')
     parser.add_argument('--logfile', help='Full path to log file')
     parser.add_argument('--pidfile', help='Many pidfiles: multiple daemons')
+    parser.add_argument('--config', help='Config file in json')
 
     sp_start = sp.add_parser('start', help='Starts %(prog)s daemon')
     sp_start.set_defaults(func=start, cmd='start')
@@ -185,7 +187,7 @@ def cli():
     # Environment variables
     envs = dict(
         debug=os.getenv('ASTAVOMS_SERVER_DEBUG', None),
-        host=int(os.getenv('ASTAVOMS_SERVER_HOST', 0)) or None,
+        host=os.getenv('ASTAVOMS_SERVER_HOST', 0) or None,
         port=int(os.getenv('ASTAVOMS_SERVER_PORT', 0)) or None,
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
@@ -194,12 +196,22 @@ def cli():
         snf_auth_url=os.getenv('ASTAVOMS_SNF_AUTH_URL', None),
         snf_admin_token=os.getenv('ASTAVOMS_SNF_ADMIN_TOKEN', None),
         logfile=os.getenv('ASTAVOMS_LOGFILE', None),
-        pidfile=os.getenv('ASTAVOMS_PIDFILE', None)
+        pidfile=os.getenv('ASTAVOMS_PIDFILE', None),
+        config=os.getenv('ASTAVOMS_CONFIG', None)
     )
-
     # Read config file and set defaults
-    # TODO manage config file
-    confs = dict(
+    config_file = args.get('config') or envs['config'] or '/etc/astavoms.json'
+    try:
+        with open(config_file) as f:
+            confs = json.load(f)
+    except Exception as e:
+        logger.warning(e)
+        sys.stderr.write('W: Failed to open config file %s\n\t%s: %s\n' % (
+            config_file, type(e), e))
+        sys.stderr.write('\tContinue without a config file\n')
+        confs =dict()
+
+    defaults = dict(
         debug=False,
         host='localhost',
         port=5000,
@@ -210,9 +222,9 @@ def cli():
         pidfile = '/var/run/astavoms-server.pid',
     )
 
-    val = lambda k: args.get(k) or envs[k] or confs[k]
+    val = lambda k: args.get(k) or envs[k] or confs.get(k) or defaults[k]
     utils.setup_logger(logger, debug=val('debug'), logfile=val('logfile'))
-    settings = {k: val(k) for k in confs.keys()}
+    settings = {k: val(k) for k in defaults.keys()}
 
     # Run server
     pargs.func(settings)
