@@ -34,7 +34,7 @@
 from kamaki.clients import astakos
 
 
-class IdentityClient(astakos.AstakosClient):
+class IdentityClient(astakos.CachedAstakosClient):
     """An Extended Identity Client"""
 
     def list_users(self):
@@ -52,7 +52,7 @@ class IdentityClient(astakos.AstakosClient):
             affilication=affiliation)
         if metadata:
             kwargs['metadata'] = metadata
-        r = self.post('users', json=dict(user=kwargs), success=201)
+        r = self.post('users', json=dict(user=kwargs), success=(200, 201))
         return r.json['user']
 
     def get_user_details(self, user_id):

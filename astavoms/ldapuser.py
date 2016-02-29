@@ -73,7 +73,7 @@ class LDAPUser:
         """
         :return: (dict) of the form dict(dn={...})
         """
-        query = '(&(objectclass=person)(givenName=%s)(sn=%s))' % (dn, vo)
+        query = '(&(objectclass=person)(givenName=%s)(sn=%s))' % (str(dn), str(vo))
         return self._search(query, attrlist)
 
     def search_by_snf_token(self, snf_token, attrlist=[]):
@@ -109,15 +109,15 @@ class LDAPUser:
         add_record = [
             ('objectclass', [
                 'person', 'organizationalperson', 'inetorgperson', 'pkiuser']),
-            ('uid', [snf_uuid]),
-            ('cn', [cn]),
-            ('sn', [vo]),
-            ('userpassword', [snf_token]),
-            ('mail', [mail]),
-            ('givenname', user_dn),
-            ('ou', ['users'])
+            ('uid', [str(snf_uuid), ]),
+            ('cn', [str(cn), ]),
+            ('sn', [str(vo), ]),
+            ('userpassword', [str(snf_token), ]),
+            ('mail', [str(mail), ]),
+            ('givenname', str(user_dn)),
+            ('ou', ['users', ])
         ]
-        dn = 'uid=%s,%s' % (snf_uuid, self.base_dn)
+        dn = 'uid=%s,%s' % (str(snf_uuid), str(self.base_dn))
         self.con.add_s(dn, add_record)
 
         if cert:
@@ -127,7 +127,7 @@ class LDAPUser:
 
     def update_snf_token(self, snf_uuid, new_snf_token):
         dn = 'uid=%s,%s' % (snf_uuid, self.base_dn)
-        mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', new_snf_token)]
+        mod_attrs = [(ldap.MOD_REPLACE, 'userpassword', str(new_snf_token))]
         self.con.modify_s(dn, mod_attrs)
 
 
