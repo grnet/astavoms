@@ -97,7 +97,7 @@ def run(settings):
     ldap_args = dict(
         ldap_url=settings.get('ldap_url'),
         admin=settings.get('ldap_admin'),
-        ldap_password=settings.get('ldap_password'),
+        password=settings.get('ldap_password'),
         base_dn=settings.get('ldap_base_dn')
     )
     voms_args = dict([(k, v) for k, v in settings.items() if k in (
