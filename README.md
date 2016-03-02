@@ -51,8 +51,8 @@ Tools
 -----
 
 A kamaki extension for the OCCI/VOMS - Astakos API (
-http://docs.astakostest.apiary.io/ ) for user creation and token refreshment
+http://docs.astakostest.apiary.io/ ) for user creation and token refreshment (astavoms.identity)
 
-An LDAP driver for accessing and updating an Astakos-VOMS aware LDAP directory
+An LDAP driver for accessing and updating an LDAP directory (astavoms.ldapuser)
 
 TODO: a tool for (manually) updating VOs and, maybe, VO users
