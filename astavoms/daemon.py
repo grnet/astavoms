@@ -221,7 +221,7 @@ def cli():
         sys.stderr.write('W: Failed to open config file %s\n\t%s: %s\n' % (
             config_file, type(e), e))
         sys.stderr.write('\tContinue without a config file\n')
-        confs =dict()
+        confs = dict()
 
     defaults = dict(
         debug=False,

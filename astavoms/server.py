@@ -146,15 +146,22 @@ def _check_request_data(voms_credentials):
 
 
 dn_to_cn = lambda dn: dn.split('/')[-1].split('=')[-1]
-retrieve_missing = lambda snf_uuid, snf_token, email, dn, vo: dict(
-    uid=snf_uuid, userPassword=snf_token, mail=email,
-    sn=vo, givenName=dn, cn=dn_to_cn(dn)
-)
 user_to_snf = lambda user: dict(
     id=user['uid'][0],
     auth_token=user['userPassword'][0],
-    )
+)
 phrase_to_str = lambda phrase: phrase.strip().replace(' ', '_')
+
+
+def compile_response_data(voms_user, snf_uuid, snf_token, email):
+    """
+    :param voms_user: (dict) VOMS authenticated user
+    :param missing_args: (dict) ldap-formated user
+    :returns: (dict) in the form expected by API specs
+    """
+    r = {'snf:uuid': snf_uuid, 'snf:token': snf_token, 'mail': email}
+    r.update(voms_user)
+    return r
 
 
 def dn_to_email(dn):
@@ -311,10 +318,9 @@ def authenticate():
     except SynnefoError as se:
         raise AstavomsSynnefoError(error=se)
 
-    response_data = dict(voms_user)
-    missing_args = retrieve_missing(snf_uuid, snf_token, email, dn, vo)
-    response_data.update(missing_args)
-    logger.debug('Return: %s %s' % (response_code, response_data))
+    response_data = compile_response_data(
+        voms_user, snf_uuid, snf_token, email)
+    logger.debug('Response data: %s' % response_data)
     return make_response(jsonify(response_data), response_code)
 
 

@@ -122,7 +122,7 @@ Response data::
         "snf:uuid": <Synnefo user UUID>,
         "snf:token": <Synnefo user token>,
         "snf:project": <Synnefo Project ID>,
-        mail": <user e-mail>,
+        "mail": <user e-mail>,
         "serverca": <VOMS server CA>,
         "voname": <VO name>,
         "uri": <VO URI>,
