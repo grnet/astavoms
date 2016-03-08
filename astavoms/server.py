@@ -18,9 +18,8 @@ import logging
 import json
 
 from astavoms.authvoms import M2Crypto
-from astavoms.ldapuser import LDAPUser, ldap
+from astavoms.ldapuser import LDAPUser
 from kamaki.clients import ClientError as SynnefoError
-from kamaki.clients import KamakiSSLError
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -66,6 +65,10 @@ class AstavomsUnknownVO(AstavomsRESTError):
     status_code = 400  # Bad request
 
 
+class AstavomsProjectError(AstavomsRESTError):
+    """Failed to enroll user to project"""
+    status_code = 400  # Unauthorized
+
 class AstavomsUnauthorizedVOMS(AstavomsRESTError):
     """VOMS Authentication Failed"""
     status_code = 401  # Unauthorized
@@ -89,6 +92,7 @@ class AstavomsSynnefoError(AstavomsRESTError):
 @app.errorhandler(AstavomsInputIsMissing)
 @app.errorhandler(AstavomsInvalidInput)
 @app.errorhandler(AstavomsUnknownVO)
+@app.errorhandler(AstavomsProjectError)
 @app.errorhandler(AstavomsUnauthorizedVOMS)
 @app.errorhandler(AstavomsSynnefoError)
 def handle_invalid_usage(error):
@@ -106,7 +110,7 @@ def log_errors(func):
                 logger.info('{err_type} {status} {message}'.format(
                     err_type=type(e), status=e.status_code, message=e.message))
                 if e.payload:
-                    logger.info('\t{payload}'.format(e.payload))
+                    logger.info('\t{0}'.format(e.payload))
             else:
                 logger.info('{err_type}: {e}'.format(err_type=type(e), e=e))
             raise
@@ -153,25 +157,36 @@ def dn_to_email(dn):
     return '{left}@{right}'.format(left=left, right=right)
 
 
-def create_snf_user(snf_admin, dn, vo, email):
+def create_snf_user(snf_admin, dn, vo, email, project=None):
     """
     :param snf_admin: (IdentityClient)
     :param dn: (str)
     :param vo: (str)
     :param email: (str)
+    :param project: (str) extra project id to enroll user to
     :returns: {'id': ..., 'auth_token': ...}
     """
     name = dn_to_cn(dn).split(' ')
     kw = dict(
         username=email,
         first_name=name[0],
-        last_name=' '.join(name[1]),
+        last_name=''.join(name[1]),
         affiliation=vo,
     )
     logger.info(
         'Create SNF user {first_name} {last_name} '
         'of {affiliation} (email: {username} )'.format(**kw))
-    return snf_admin.create_user(**kw)
+    r = snf_admin.create_user(**kw)
+    if project:
+        logger.info('Enroll {user} to snf:project {project}'.format(
+            user=email, project=project))
+        try:
+            snf_admin.enroll_to_project(email, project)
+        except SynnefoError as se:
+            raise AstavomsProjectError(
+                status_code=getattr(se, 'status', None),
+                payload=dict(err='{0!r}'.format(se)))#, payload=dict(err=se))
+    return r
 
 
 @app.route('/authenticate', methods=['POST', ])
@@ -210,7 +225,7 @@ def authenticate():
     cert, chain = voms_credentials['cert'], voms_credentials['chain']
     try:
         voms_user = vomsauth.get_voms_info(cert, chain, verify=False)
-    except M2Crypto.X509.X509Error as e:
+    except M2Crypto.X509.X509Error:
         raise AstavomsUnauthorizedVOMS()
     logger.debug('VOMS user: {voms}'.format(voms=voms_user))
 
@@ -241,7 +256,7 @@ def authenticate():
             logger.info('Make sure VO is known')
             try:
                 project_id = vo_projects[vo]
-            except KeyError as ke:
+            except KeyError:
                 raise AstavomsUnknownVO('Unknown VO: {vo}'.format(vo=vo))
 
             logger.info('Make sure user exists in LDAP')
@@ -263,7 +278,8 @@ def authenticate():
                     logger.debug('SNF: {err} {status}'.format(
                         err=se, status=getattr(se, 'status')))
                     logger.info('SNF user not found')
-                    snf_user = create_snf_user(snf_admin, dn, vo, email)
+                    snf_user = create_snf_user(
+                        snf_admin, dn, vo, email, project_id)
                     response_code = 202
 
                 snf_uuid, snf_token = snf_user['id'], snf_user['auth_token']
@@ -296,7 +312,8 @@ def authenticate():
                         logger.debug(
                             'SNF: %s %s' % (se, getattr(se, 'status')))
                         logger.info('SNF: user not found')
-                        snf_user = create_snf_user(snf_admin, dn, vo, email)
+                        snf_user = create_snf_user(
+                            snf_admin, dn, vo, email, project_id)
                         logger.debug('Created SNF user {user}'.format(
                             user=snf_user))
                         snf_old_uuid, snf_uuid = snf_uuid, snf_user['id']

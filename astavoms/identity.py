@@ -1,4 +1,4 @@
-# Copyright 2015 GRNET S.A.
+# Copyright 2015-2016 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from kamaki.clients import astakos
+from kamaki.clients import astakos, ClientError
 
 
 class IdentityClient(astakos.CachedAstakosClient):
@@ -66,23 +66,35 @@ class IdentityClient(astakos.CachedAstakosClient):
             kwargs['email'] = email
         if metadata:
             kwargs['metadata'] = metadata
-        r = self.put('users/%s' % user_id, json=dict(user=kwargs), success=200)
+        path = 'users/{id}'.format(id=user_id)
+        r = self.put(path, json=dict(user=kwargs), success=200)
         return r.json['user']
 
     def activate_user(self, user_id):
         """Activate a user"""
-        r = self.post(
-            'users/%s/action' % user_id, json=dict(activate={}), success=200)
+        path = 'users/{id}/action'.format(id=user_id)
+        r = self.post(path, json=dict(activate={}), success=200)
         return r.json['user']
 
     def deactivate_user(self, user_id):
         """Deactivate a user"""
-        r = self.post(
-            'users/%s/action' % user_id, json=dict(deactivate={}), success=200)
+        path = 'users/{id}/action'.format(id=user_id),
+        r = self.post(path, json=dict(deactivate={}), success=200)
         return r.json['user']
 
     def renew_user_token(self, user_id):
         """Renew user authentication token"""
-        r = self.post(
-            'users/%s/action' % user_id, json=dict(renewToken={}), success=200)
+        path = 'users/{id}/action'.format(id=user_id)
+        r = self.post(path, json=dict(renewToken={}), success=200)
         return r.json['user']
+
+    def enroll_to_project(self, username, project):
+        """Make sure a user is enrolled to a project
+        :param username: (str) typically, the user email
+        :param project: (str) the project id
+        """
+        try:
+            self.get_client().enroll_member(project, username)
+        except ClientError as ce:
+            if ce not in (409, ):
+                raise
