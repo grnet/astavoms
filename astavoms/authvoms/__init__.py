@@ -90,7 +90,7 @@ class VomsAuth:
                
             voms_data = v.retrieve(cert, chain)
             if not voms_data:
-                err_code = VomsError(error_code=v.error.value)
+                err = VomsError(error_code=v.error.value)
                 logger.debug(err)
                 raise err
 
