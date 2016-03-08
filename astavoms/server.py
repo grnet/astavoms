@@ -15,21 +15,22 @@
 
 from flask import Flask, request, make_response, jsonify
 import logging
+import json
 
 from astavoms.authvoms import M2Crypto
 from astavoms.ldapuser import LDAPUser, ldap
 from kamaki.clients import ClientError as SynnefoError
-from kamaki.clients  import KamakiSSLError
+from kamaki.clients import KamakiSSLError
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
 
-ASTAVOMS_SERVER_SETTINGS=dict()
+ASTAVOMS_SERVER_SETTINGS = dict()
 
 
 class AstavomsRESTError(Exception):
     """Template class for Astavoms errors"""
-    status_code = None # Must be set
+    status_code = None  # Must be set
 
     def __init__(self, message=None, status_code=None, payload=None):
         """ Add some context to the error
@@ -52,35 +53,42 @@ class AstavomsRESTError(Exception):
 
 class AstavomsInputIsMissing(AstavomsRESTError):
     """Request is missing data input"""
-    status_code = 400 # Bad request
+    status_code = 400  # Bad request
 
 
 class AstavomsInvalidInput(AstavomsRESTError):
     """Input is missing some elements"""
-    status_code = 400 # Bad request
+    status_code = 400  # Bad request
+
+
+class AstavomsUnknownVO(AstavomsRESTError):
+    """Virtual Organization not in dictionary"""
+    status_code = 400  # Bad request
 
 
 class AstavomsUnauthorizedVOMS(AstavomsRESTError):
     """VOMS Authentication Failed"""
-    status_code = 401 # Unauthorized
+    status_code = 401  # Unauthorized
 
 
 class AstavomsSynnefoError(AstavomsRESTError):
     """Synnefo Error"""
-    status_code = 500 # Internal Server Error
+    status_code = 500  # Internal Server Error
 
     def __init__(
             self, message=None, status_code=500, payload=dict(), error=None):
         if error:
             snf_status = getattr(error, 'status', '')
-            message = message or 'SNF: %s %s' % (error, snf_status)
-            payload = payload.update(
-                dict(type=error, error='%s' % error, snf_status=snf_status))
+            message = message or 'SNF: {err} {status}'.format(
+                err=error, status=snf_status)
+            payload = payload.update(dict(
+                type=error, error='{0}'.format(error), snf_status=snf_status))
         AstavomsRESTError.__init__(self, message, status_code, payload)
 
 
 @app.errorhandler(AstavomsInputIsMissing)
 @app.errorhandler(AstavomsInvalidInput)
+@app.errorhandler(AstavomsUnknownVO)
 @app.errorhandler(AstavomsUnauthorizedVOMS)
 @app.errorhandler(AstavomsSynnefoError)
 def handle_invalid_usage(error):
@@ -95,11 +103,12 @@ def log_errors(func):
             return func(*args, **kwargs)
         except Exception as e:
             if isinstance(e, AstavomsRESTError):
-                logger.info('%s %s %s' % (type(e), e.status_code, e.message))
+                logger.info('{err_type} {status} {message}'.format(
+                    err_type=type(e), status=e.status_code, message=e.message))
                 if e.payload:
-                    logger.info('\t%s' % e.payload)
+                    logger.info('\t{payload}'.format(e.payload))
             else:
-                logger.info('%s: %s' % (type(e), e))
+                logger.info('{err_type}: {e}'.format(err_type=type(e), e=e))
             raise
     wrap.__name__ = func.__name__
     return wrap
@@ -127,12 +136,10 @@ def _check_request_data(voms_credentials):
         raise AstavomsInvalidInput(err_msg, payload=payload)
 
 
-dn_to_cn = lambda dn: dn.split('/')[-1].split('=')[-1]
-user_to_snf = lambda user: dict(
-    id=user['uid'][0],
-    auth_token=user['userPassword'][0],
-)
-phrase_to_str = lambda phrase: phrase.strip().replace(' ', '_')
+def dn_to_cn(dn): return dn.split('/')[-1].split('=')[-1]
+
+
+def phrase_to_str(phrase): return phrase.strip().replace(' ', '_')
 
 
 def compile_response_data(voms_user, snf_uuid, snf_token, email):
@@ -154,7 +161,7 @@ def dn_to_email(dn):
     terms = [term.split('=') for term in dn.split('/') if term.strip()]
     left = phrase_to_str(terms[-1][1])
     right = '.'.join([phrase_to_str(term[1]) for term in reversed(terms[:-1])])
-    return '%s@%s' % (left, right)
+    return '{left}@{right}'.format(left=left, right=right)
 
 
 def create_snf_user(snf_admin, dn, vo, email):
@@ -166,15 +173,16 @@ def create_snf_user(snf_admin, dn, vo, email):
     :returns: {'id': ..., 'auth_token': ...}
     """
     name = dn_to_cn(dn).split(' ')
-    first_name, last_name = name[0], ' '.join(name[1:])
-    logger.info('Create SNF user %s %s of %s (email: %s )' % (
-        first_name, last_name, vo, email))
-    return snf_admin.create_user(
+    kw = dict(
         username=email,
-        first_name=first_name,
-        last_name=last_name,
-        affiliation=vo
+        first_name=name[0],
+        last_name=' '.join(name[1]),
+        affiliation=vo,
     )
+    logger.info(
+        'Create SNF user {first_name} {last_name} '
+        'of {affiliation} (email: {username} )'.format(**kw))
+    return snf_admin.create_user(**kw)
 
 
 @app.route('/authenticate', methods=['POST', ])
@@ -198,7 +206,7 @@ def authenticate():
             TODO
     """
     logger.info('POST /authenticate')
-    logger.debug('data: %s' % request.data)
+    logger.debug('data: {data}'.format(data=request.data))
 
     logger.info('Get VOMS credentials')
     voms_credentials = request.json if request.data else None
@@ -206,8 +214,8 @@ def authenticate():
 
     logger.info('Load settings')
     settings = app.config['ASTAVOMS_SERVER_SETTINGS']
-    logger.debug('settings: %s' % settings)
-    
+    logger.debug('settings: {settings}'.format(settings=settings))
+
     logger.info('Authenticate VOMS user')
     vomsauth = settings['vomsauth']
     cert, chain = voms_credentials['cert'], voms_credentials['chain']
@@ -215,7 +223,7 @@ def authenticate():
         voms_user = vomsauth.get_voms_info(cert, chain, verify=False)
     except M2Crypto.X509.X509Error as e:
         raise AstavomsUnauthorizedVOMS()
-    logger.debug('VOMS user: %s' % voms_user)
+    logger.debug('VOMS user: {voms}'.format(voms=voms_user))
 
     logger.info('Get Synnefo admin client')
     snf_admin = settings['snf_admin']
@@ -228,16 +236,28 @@ def authenticate():
             error=se)
     response_code = 201
 
+    logger.info('Load mappings of VOs to Synnefo Projects')
+    with open(settings['vo_projects']) as f:
+        vo_projects = json.load(f)
+    logger.debug('VO-projects: {vo_projects}'.format(vo_projects=vo_projects))
+
     logger.info('Connect to LDAP directory')
     ldap_args = settings['ldap_args']
-    logger.debug('LDAP args: %s' % ldap_args)
+    logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
 
     try:
         with LDAPUser(**ldap_args) as ldap_user:
-            logger.info('Make sure user exists in LDAP')
             dn, vo = voms_user['user'], voms_user['voname']
+
+            logger.info('Make sure VO is known')
+            try:
+                project_id = vo_projects[vo]
+            except KeyError as ke:
+                raise AstavomsUnknownVO('Unknown VO: {vo}'.format(vo=vo))
+
+            logger.info('Make sure user exists in LDAP')
             user = ldap_user.search_by_voms(dn, vo)
-            logger.debug('LDAP User: %s' % user)
+            logger.debug('LDAP User: {user}'.format(user=user))
 
             if not user:
                 logger.info('No such user in LDAP, look up in Synnefo')
@@ -251,7 +271,8 @@ def authenticate():
                     if getattr(se, 'status') not in (404, 500, ):
                         # For some reason, AstakosClient.get_uuid returns 500
                         raise
-                    logger.debug('SNF: %s %s' % (se, getattr(se, 'status')))
+                    logger.debug('SNF: {err} {status}'.format(
+                        err=se, status=getattr(se, 'status')))
                     logger.info('SNF user not found')
                     snf_user = create_snf_user(snf_admin, dn, vo, email)
                     response_code = 202
@@ -265,7 +286,8 @@ def authenticate():
                 logger.info('Authenticate Synnefo User')
                 user = user[0][1]
                 email = user['mail'][0]
-                snf_user = user_to_snf(user)
+                snf_user = dict(
+                    id=user['uid'][0], auth_token=user['userPassword'][0])
                 snf_uuid, snf_token = snf_user['id'], snf_user['auth_token']
                 try:
                     snf_admin.authenticate(snf_token)
@@ -286,7 +308,8 @@ def authenticate():
                             'SNF: %s %s' % (se, getattr(se, 'status')))
                         logger.info('SNF: user not found')
                         snf_user = create_snf_user(snf_admin, dn, vo, email)
-                        logger.debug('Created SNF user %s' % snf_user)
+                        logger.debug('Created SNF user {user}'.format(
+                            user=snf_user))
                         snf_old_uuid, snf_uuid = snf_uuid, snf_user['id']
                         snf_token = snf_user['auth_token']
                         logger.info('Remove user from LDAP')
@@ -302,7 +325,7 @@ def authenticate():
 
     response_data = compile_response_data(
         voms_user, snf_uuid, snf_token, email)
-    logger.debug('Response data: %s' % response_data)
+    logger.debug('Response data: {data}'.format(data=response_data))
     return make_response(jsonify(response_data), response_code)
 
 
@@ -316,4 +339,3 @@ if __name__ == '__main__':
     args = parser.parse_args()
     app.config.from_object(__name__)
     app.run(debug=args.debug, host=args.host, port=args.port)
-
