@@ -28,15 +28,15 @@ logger = utils.logging.getLogger(__name__)
 
 def daemon(pidfile, logfile):
     """Create a daemon process detached from the CLI process"""
-    logger.info("Start daemon")
+    logger.info('Start daemon')
     if os.path.exists(pidfile):
-        logger.info("Daemon exists (pid file found)")
-        sys.stderr.write("Daemon exists (pid file found)\n")
+        logger.info('Daemon exists (pid file found)')
+        sys.stderr.write('Daemon exists (pid file found)\n')
         sys.exit(0)
     try:
         pid = os.fork()
         if pid > 0:
-            sys.stderr.write("started\n")
+            sys.stderr.write('started\n')
             sys.exit(0)
     except OSError as e:
         import traceback
@@ -49,10 +49,10 @@ def daemon(pidfile, logfile):
     os.chdir('/')
     with open(pidfile, 'w') as f:
         f.write(str(os.getpid()))
-    sys.stdin  = file('/dev/null','r')
-    sys.stdout = file(logfile,'a+')
-    sys.stderr = file(logfile,'a+')
-    logger.info("Daemon is running")
+    sys.stdin = file('/dev/null', 'r')
+    sys.stdout = file(logfile, 'a+')
+    sys.stderr = file(logfile, 'a+')
+    logger.info('Daemon is running')
 
 
 def status(settings):
@@ -61,18 +61,20 @@ def status(settings):
         with open(settings['pidfile']) as f:
             pid = int(f.read().strip())
         os.kill(int(pid), 0)
-        sys.stdout.write('Running ( pid: %s )\n' % pid)
+        sys.stdout.write('Running ( pid: {pid} )\n'.format(pid=pid))
     except ValueError as ve:
         logger.debug(ve)
-        sys.stdout.write("Error while reading PID from file:\n\t%s\n" % ve)
+        sys.stdout.write(
+            'Error while reading PID from file:\n\t{ve}}\n'.format(ve=ve))
     except OSError as oee:
         logger.debug(oee)
         sys.stdout.write(
-            "Process %s not running, althought file %s exists\n" % (
-                pid, settings['pidfile']))
+            'Process {pid} not running, '
+            'althought file {pidfile} exists\n'.format(
+                pid=pid, pidfile=settings['pidfile']))
     except IOError as ioe:
         logger.debug(ioe)
-        sys.stdout.write("Stopped\n")
+        sys.stdout.write('Stopped\n')
 
 
 def run(settings):
@@ -87,6 +89,7 @@ def run(settings):
         'voms_policy', 'voms_dir', 'ca_path', 'voms_api_lib')])
 
     snf_certs = settings.get('snf_ca_certs', None)
+    vo_projects = settings.get('vo_projects', None)
     if snf_certs:
         https.patch_with_certs(snf_certs)
     elif settings.get('snf_ignore_ssl', None):
@@ -98,7 +101,8 @@ def run(settings):
     server.ASTAVOMS_SERVER_SETTINGS.update(dict(
         ldap_args=ldap_args,
         vomsauth=authvoms.VomsAuth(**voms_args),
-        snf_admin=snf_admin
+        snf_admin=snf_admin,
+        vo_projects=vo_projects,
     ))
     server.app.config.from_object(server)
     utils.setup_logger(
@@ -109,7 +113,7 @@ def run(settings):
 
 def start(settings):
     """Start the daemon and run"""
-    sys.stderr.write("Starting ... ")
+    sys.stderr.write('Starting ... ')
     daemon(pidfile=settings['pidfile'], logfile=settings['logfile'])
     run(settings)
 
@@ -117,7 +121,7 @@ def start(settings):
 def stop(settings):
     """Stop the daemon"""
     sys.stderr.write("Stopping ... ")
-    logger.info("Stop the daemon")
+    logger.info('Stop the daemon')
     pidfile = settings['pidfile']
     try:
         with open(pidfile, 'r') as f:
@@ -126,11 +130,12 @@ def stop(settings):
                 os.kill(pid, SIGTERM)
             finally:
                 os.remove(pidfile)
-        logger.info("Daemon is now stopped")
+        logger.info('Daemon is now stopped')
         sys.stderr.write("stopped\n")
     except Exception as e:
-        logger.debug("Failed to stop daemon: %s" % e)
-        sys.stderr.write('\n\t%s\n' % e)
+        logger.debug('Failed to stop daemon: {e}'.format(e=e))
+        sys.stderr.write('\n\t{e}\n'.format(e=e))
+
 
 def restart(settings):
     """Restart the daemon"""
@@ -152,20 +157,21 @@ def cli():
     sp_start = sp.add_parser('start', help='Starts %(prog)s daemon')
     sp_start.set_defaults(func=start, cmd='start')
     sp_start.add_argument('--host', help='IP or domain name for server')
-    sp_start.add_argument('--port',
-        help='server will listen to this port', type=int)
+    sp_start.add_argument(
+        '--port', help='server will listen to this port', type=int)
     sp_start.add_argument('--ldap-url', help='address of LDAP server')
     sp_start.add_argument('--ldap-admin', help='LDAP admin user name')
     sp_start.add_argument('--ldap-password', help='LDAP admin password')
     sp_start.add_argument('--snf-auth-url', help='Synnefo Authentication URL')
     sp_start.add_argument('--snf-admin-token', help='Synnefo admin token')
+    sp_start.add_argument('--vo-projects', help='Path to VO-projects json map')
     sp_start.add_argument('--snf-ca-certs', help='Synnefo Client CA certs')
     sp_start.add_argument('--snf-ignore-ssl', help='Ignore Synnefo Client SSL')
 
-    sp_stop = sp.add_parser('stop',help='Stop %(prog)s daemon')
+    sp_stop = sp.add_parser('stop', help='Stop %(prog)s daemon')
     sp_stop.set_defaults(func=stop, cmd='stop')
 
-    sp_restart = sp.add_parser('restart',help='Restart %(prog)s daemon')
+    sp_restart = sp.add_parser('restart', help='Restart %(prog)s daemon')
     sp_restart.set_defaults(func=restart, cmd='restart')
 
     sp_status = sp.add_parser(
@@ -187,37 +193,43 @@ def cli():
         ldap_base_dn=os.getenv('ASTAVOMS_LDAP_BASE_DN', None),
         snf_auth_url=os.getenv('ASTAVOMS_SNF_AUTH_URL', None),
         snf_admin_token=os.getenv('ASTAVOMS_SNF_ADMIN_TOKEN', None),
+        vo_projects=os.getenv('ASTAVOMS_VO_PROJECTS'),
         snf_ca_certs=os.getenv('ASTAVOMS_SNF_CA_CERTS', None),
         snf_ignore_ssl=os.getenv('ASTAVOMS_SNF_CA_CERTS', None),
         logfile=os.getenv('ASTAVOMS_LOGFILE', None),
         pidfile=os.getenv('ASTAVOMS_PIDFILE', None),
-        config=os.getenv('ASTAVOMS_CONFIG', None)
+        config=os.getenv('ASTAVOMS_CONFIG', None),
     )
-    # Read config file and set defaults
-    config_file = args.get('config') or envs['config'] or '/etc/astavoms.json'
+
+    # Set defaults
+    defaults = dict(
+        debug=False,
+        host='localhost', port=5000,
+        ldap_url='ldap://localhost',
+        ldap_admin='', ldap_password='', ldap_base_dn='',
+        snf_auth_url='', snf_admin_token='',
+        vo_projects='/etc/astavoms/vo_projects.json',
+        snf_ca_certs='', snf_ignore_ssl=False,
+        logfile='/var/run/astavoms-server.log',
+        pidfile='/var/run/astavoms-server.pid',
+        config='/etc/astavoms/config.json',
+    )
+
+    # Read config
+    config_file = args.get('config') or envs['config'] or defaults['config']
     try:
         with open(config_file) as f:
             confs = json.load(f)
     except Exception as e:
         logger.warning(e)
-        sys.stderr.write('W: Failed to open config file %s\n\t%s: %s\n' % (
-            config_file, type(e), e))
+        sys.stderr.write(
+            'W: Failed to open config file {config}\n'
+            '\t{err_type}: {e}\n'.format(
+                config=config_file, err_type=type(e), e=e))
         sys.stderr.write('\tContinue without a config file\n')
         confs = dict()
 
-    defaults = dict(
-        debug=False,
-        host='localhost',
-        port=5000,
-        ldap_url='ldap://localhost',
-        ldap_admin='', ldap_password='', ldap_base_dn='',
-        snf_auth_url='', snf_admin_token='',
-        snf_ca_certs='', snf_ignore_ssl=False,
-        logfile='/var/run/astavoms-server.log',
-        pidfile = '/var/run/astavoms-server.pid',
-    )
-
-    val = lambda k: args.get(k) or envs[k] or confs.get(k) or defaults[k]
+    def val(k): return args.get(k) or envs[k] or confs.get(k) or defaults[k]
     utils.setup_logger(logger, debug=val('debug'), logfile=val('logfile'))
     settings = {k: val(k) for k in defaults.keys()}
 
