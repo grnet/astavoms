@@ -142,17 +142,6 @@ def dn_to_cn(dn): return dn.split('/')[-1].split('=')[-1]
 def phrase_to_str(phrase): return phrase.strip().replace(' ', '_')
 
 
-def compile_response_data(voms_user, snf_uuid, snf_token, email):
-    """
-    :param voms_user: (dict) VOMS authenticated user
-    :param missing_args: (dict) ldap-formated user
-    :returns: (dict) in the form expected by API specs
-    """
-    r = {'snf:uuid': snf_uuid, 'snf:token': snf_token, 'mail': email}
-    r.update(voms_user)
-    return r
-
-
 def dn_to_email(dn):
     """
     :param dn: (str) user dn in /k1=v1/k2=v2/.../cn=user_cn form
@@ -323,8 +312,12 @@ def authenticate():
     except SynnefoError as se:
         raise AstavomsSynnefoError(error=se)
 
-    response_data = compile_response_data(
-        voms_user, snf_uuid, snf_token, email)
+    response_data = {
+        'snf:uuid': snf_uuid,
+        'snf:token': snf_token,
+        'snf:project': project_id,
+        'mail': email}
+    response_data.update(voms_user)
     logger.debug('Response data: {data}'.format(data=response_data))
     return make_response(jsonify(response_data), response_code)
 
