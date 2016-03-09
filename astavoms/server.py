@@ -69,6 +69,7 @@ class AstavomsProjectError(AstavomsRESTError):
     """Failed to enroll user to project"""
     status_code = 400  # Unauthorized
 
+
 class AstavomsUnauthorizedVOMS(AstavomsRESTError):
     """VOMS Authentication Failed"""
     status_code = 401  # Unauthorized
@@ -86,6 +87,7 @@ class AstavomsSynnefoError(AstavomsRESTError):
                 err=error, status=snf_status)
             payload = payload.update(dict(
                 type=error, error='{0}'.format(error), snf_status=snf_status))
+            status_code = snf_status or status_code
         AstavomsRESTError.__init__(self, message, status_code, payload)
 
 
@@ -176,17 +178,21 @@ def create_snf_user(snf_admin, dn, vo, email, project=None):
     logger.info(
         'Create SNF user {first_name} {last_name} '
         'of {affiliation} (email: {username} )'.format(**kw))
-    r = snf_admin.create_user(**kw)
-    if project:
-        logger.info('Enroll {user} to snf:project {project}'.format(
-            user=email, project=project))
-        try:
-            snf_admin.enroll_to_project(email, project)
-        except SynnefoError as se:
-            raise AstavomsProjectError(
-                status_code=getattr(se, 'status', None),
-                payload=dict(err='{0!r}'.format(se)))#, payload=dict(err=se))
-    return r
+    return snf_admin.create_user(**kw)
+
+
+def enroll_to_project(snf_admin, email, project):
+    """
+    :param email: (str) the SNF username
+    :param project: (str) the SNF project id
+    """
+    try:
+        snf_admin.enroll_to_project(email, project)
+    except SynnefoError as se:
+        status = getattr(se, 'status')
+        if status not in (409, ):  # 409: User is already enrolled
+            raise
+        logger.debug('User is already enrolled')
 
 
 @app.route('/authenticate', methods=['POST', ])
@@ -269,7 +275,7 @@ def authenticate():
 
                 try:
                     snf_uuid = snf_admin.get_client().get_uuid(email)
-                    logger.info('SNF user exists')
+                    logger.info('SNF user exists, renew token')
                     snf_user = snf_admin.renew_user_token(snf_uuid)
                 except SynnefoError as se:
                     if getattr(se, 'status') not in (404, 500, ):
@@ -297,9 +303,11 @@ def authenticate():
                 try:
                     snf_admin.authenticate(snf_token)
                 except SynnefoError as se:
-                    if getattr(se, 'status') not in (401, ):
+                    status = getattr(se, 'status')
+                    if status not in (401, ):
                         raise
-                    logger.debug('SNF: %s %s' % (se, getattr(se, 'status')))
+                    logger.debug('SNF: {error} {status}'.format(
+                            error=se, status=status))
                     logger.info('Authentication failed, refresh SNF token')
                     try:
                         snf_user = snf_admin.renew_user_token(snf_uuid)
@@ -307,10 +315,11 @@ def authenticate():
                         logger.info('Update ldap with new token')
                         ldap_user.update_snf_token(snf_uuid, snf_token)
                     except SynnefoError as no_user:
-                        if getattr(no_user, 'status') not in (404, 500, ):
+                        status = getattr(no_user, 'status')
+                        if status not in (404, 500, ):
                             raise
-                        logger.debug(
-                            'SNF: %s %s' % (se, getattr(se, 'status')))
+                        logger.debug('SNF: {error} {status}'.format(
+                            error=no_user, status=status))
                         logger.info('SNF: user not found')
                         snf_user = create_snf_user(
                             snf_admin, dn, vo, email, project_id)
@@ -325,6 +334,11 @@ def authenticate():
                             snf_uuid=snf_uuid, snf_token=snf_token,
                             mail=email, cn=dn_to_cn(dn), vo=vo, user_dn=dn)
                         response_code = 202
+
+            if project_id:
+                logger.info('Enroll user to project')
+                logger.debug('Project id: {project}'.format(project=project_id))
+                enroll_to_project(snf_admin, email, project_id)
 
     except SynnefoError as se:
         raise AstavomsSynnefoError(error=se)
