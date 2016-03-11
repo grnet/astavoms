@@ -217,7 +217,7 @@ def cli():
         snf_ca_certs='', snf_ignore_ssl=False,
         logfile='/var/run/astavoms-server.log',
         pidfile='/var/run/astavoms-server.pid',
-        config='/etc/astavoms/config.json',
+        config='astavoms/settings.json',
     )
 
     # Read config

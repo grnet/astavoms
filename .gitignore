@@ -5,3 +5,4 @@ _build
 build
 dist
 notes.txt
+settings.json
