@@ -103,6 +103,7 @@ def run(settings):
         vomsauth=authvoms.VomsAuth(**voms_args),
         snf_admin=snf_admin,
         vo_projects=vo_projects,
+        disable_voms_verification=settings.get('disable_voms_verification'),
     ))
     server.app.config.from_object(server)
     utils.setup_logger(
@@ -168,6 +169,8 @@ def cli():
     sp_start.add_argument('--vo-projects', help='Path to VO-projects json map')
     sp_start.add_argument('--snf-ca-certs', help='Synnefo Client CA certs')
     sp_start.add_argument('--snf-ignore-ssl', help='Ignore Synnefo Client SSL')
+    sp_start.add_argument(
+        '--disable-voms-verification', help='Do not check VOMS signature')
 
     sp_stop = sp.add_parser('stop', help='Stop %(prog)s daemon')
     sp_stop.set_defaults(func=stop, cmd='stop')
@@ -188,6 +191,8 @@ def cli():
         debug=os.getenv('ASTAVOMS_SERVER_DEBUG', None),
         host=os.getenv('ASTAVOMS_SERVER_HOST', 0) or None,
         port=int(os.getenv('ASTAVOMS_SERVER_PORT', 0)) or None,
+        disable_voms_verification=os.getenv(
+            'ASTAVOMS_DISABLE_VOMS_VERIFICATION', None),
         ldap_url=os.getenv('ASTAVOMS_LDAP_URL', None),
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
         ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
@@ -206,6 +211,7 @@ def cli():
     defaults = dict(
         debug=False,
         host='localhost', port=5000,
+        disable_voms_verification=False,
         ldap_url='ldap://localhost',
         ldap_admin='', ldap_password='', ldap_base_dn='',
         snf_auth_url='', snf_admin_token='',

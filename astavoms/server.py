@@ -229,8 +229,9 @@ def authenticate():
     logger.info('Authenticate VOMS user')
     vomsauth = settings['vomsauth']
     cert, chain = voms_credentials['cert'], voms_credentials['chain']
+    voms_verify = not settings.get('disable_voms_verification')
     try:
-        voms_user = vomsauth.get_voms_info(cert, chain, verify=False)
+        voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
     except (M2Crypto.X509.X509Error, VomsError) as e:
         raise AstavomsUnauthorizedVOMS(
             payload=dict(type=e, error='{0}'.format(e)))
