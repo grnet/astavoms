@@ -18,7 +18,7 @@ import logging
 
 from astavoms.authvoms import voms_helper
 
-logger =  logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class VomsError(Exception):
@@ -82,12 +82,12 @@ class VomsAuth:
         except M2Crypto.X509.X509Error as e:
             logger.debug(e)
             raise
-       
+
         with voms_helper.VOMS(
                 self.voms_dir, self.ca_path, self.voms_api_lib) as v:
             if not verify:
                 v.set_no_verify()
-               
+
             voms_data = v.retrieve(cert, chain)
             if not voms_data:
                 err = VomsError(error_code=v.error.value)

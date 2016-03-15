@@ -137,6 +137,7 @@ def stop(settings):
         sys.stderr.write('\n\t{e}\n'.format(e=e))
 
 
+
 def restart(settings):
     """Restart the daemon"""
     stop(settings)

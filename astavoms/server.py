@@ -17,7 +17,7 @@ from flask import Flask, request, make_response, jsonify
 import logging
 import json
 
-from astavoms.authvoms import M2Crypto
+from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
 from kamaki.clients import ClientError as SynnefoError
 
@@ -231,8 +231,9 @@ def authenticate():
     cert, chain = voms_credentials['cert'], voms_credentials['chain']
     try:
         voms_user = vomsauth.get_voms_info(cert, chain, verify=False)
-    except M2Crypto.X509.X509Error:
-        raise AstavomsUnauthorizedVOMS()
+    except (M2Crypto.X509.X509Error, VomsError) as e:
+        raise AstavomsUnauthorizedVOMS(
+            payload=dict(type=e, error='{0}'.format(e)))
     logger.debug('VOMS user: {voms}'.format(voms=voms_user))
 
     logger.info('Get Synnefo admin client')
