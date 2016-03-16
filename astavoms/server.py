@@ -142,10 +142,12 @@ def _check_request_data(voms_credentials):
         raise AstavomsInvalidInput(err_msg, payload=payload)
 
 
-def dn_to_cn(dn): return dn.split('/')[-1].split('=')[-1]
+def dn_to_cn(dn):
+    return dn.split('/')[-1].split('=')[-1]
 
 
-def phrase_to_str(phrase): return phrase.strip().replace(' ', '_')
+def phrase_to_str(phrase):
+    return phrase.strip().replace(' ', '_')
 
 
 def dn_to_email(dn):
@@ -309,7 +311,7 @@ def authenticate():
                     if status not in (401, ):
                         raise
                     logger.debug('SNF: {error} {status}'.format(
-                            error=se, status=status))
+                        error=se, status=status))
                     logger.info('Authentication failed, refresh SNF token')
                     try:
                         snf_user = snf_admin.renew_user_token(snf_uuid)
@@ -339,7 +341,8 @@ def authenticate():
 
             if project_id:
                 logger.info('Enroll user to project')
-                logger.debug('Project id: {project}'.format(project=project_id))
+                logger.debug(
+                    'Project id: {project}'.format(project=project_id))
                 enroll_to_project(snf_admin, email, project_id)
 
     except SynnefoError as se:

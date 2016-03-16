@@ -15,7 +15,6 @@
 
 import os
 import sys
-import logging
 import argparse
 import json
 from signal import SIGTERM
@@ -138,7 +137,6 @@ def stop(settings):
         sys.stderr.write('\n\t{e}\n'.format(e=e))
 
 
-
 def restart(settings):
     """Restart the daemon"""
     stop(settings)
@@ -236,7 +234,9 @@ def cli():
         sys.stderr.write('\tContinue without a config file\n')
         confs = dict()
 
-    def val(k): return args.get(k) or envs[k] or confs.get(k) or defaults[k]
+    def val(k):
+        return args.get(k) or envs[k] or confs.get(k) or defaults[k]
+
     utils.setup_logger(logger, debug=val('debug'), logfile=val('logfile'))
     settings = {k: val(k) for k in defaults.keys()}
 
