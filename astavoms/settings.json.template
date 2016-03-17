@@ -1,0 +1,17 @@
+{
+    "ldap_url": "ldap://ldap.example.org",
+    "ldap_admin": "cn=admin,dc=example,dc=org",
+    "ldap_password": "passwd",
+    "ldap_base_dn": "ou=users,dc=example,dc=org",
+    "snf_auth_url": "https://astakos.synnefo.live/astakos/identity/v2.0",
+    "snf_admin_token": "synnefo-admin-token",
+    "snf_ca_certs": "/etc/ssl/certs/synnefo_ca.pem",
+    "vo_projects": "/etc/astavoms/vo_projects.json",
+    "disable_voms_verification": false,
+    "voms_policy": "/etc/astavoms/voms.json",
+    "voms_dir": "/etc/grid-security/vomsdir",
+    "ca_path": "/etc/grid-security/certificates",
+    "voms_api_lib": "/usr/lib/libvomsapi1",
+    "logfile": "/var/log/astavoms/server.log",
+    "debug": false
+}

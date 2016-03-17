@@ -20,8 +20,18 @@ Assuming a debian-like system, the following packages are required:
 # apt-get install libvomsapi1
 ```
 
-TODO: Setting up the system for VOMS authentication
+There are two modes of deployment: for testing/development and full scale.
 
+The first deploys a lightweight Flask server, but it does not support any
+advanced features like SSL or load balancing. It is easy to run:
+
+```
+# astavoms-server --config /etc/astavoms/settings.json start
+```
+
+The full scale method requires gunicorn and apache2 and is described in detail
+in deploy.rst, along with all settings required to setup the server for VO
+authentication and how to set various service settings.
 
 Using the server
 ----------------
@@ -54,6 +64,8 @@ A kamaki extension for the OCCI/VOMS - Astakos API (
 http://docs.astakostest.apiary.io/ ) for user creation and token refreshment (astavoms.identity)
 
 An LDAP driver for accessing and updating an LDAP directory (astavoms.ldapuser)
+
+A kamaki extension for dealing with an astavoms service (astavomaki)
 
 TODO: a tool for (manually) updating VOs and, maybe, VO users
 

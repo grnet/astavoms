@@ -55,8 +55,8 @@ class VomsError(Exception):
 
 class VomsAuth:
     """Manage VOMS SSL authentication and retrieve user information"""
-    voms_policy = '/etc/snf/voms.json'
-    voms_dir = '/etc/grid-security/voms_dir/'
+    voms_policy = '/etc/astavoms/voms.json'
+    voms_dir = '/etc/grid-security/vomsdir/'
     ca_path = '/etc/grid-security/certificates/'
     voms_api_lib = "/usr/lib/libvomsapi.so.1"
 
