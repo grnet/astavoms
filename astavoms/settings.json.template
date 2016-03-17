@@ -11,7 +11,7 @@
     "voms_policy": "/etc/astavoms/voms.json",
     "voms_dir": "/etc/grid-security/vomsdir",
     "ca_path": "/etc/grid-security/certificates",
-    "voms_api_lib": "/usr/lib/libvomsapi1",
+    "voms_api_lib": "/usr/lib/libvomsapi.so.1",
     "logfile": "/var/log/astavoms/server.log",
     "debug": false
 }

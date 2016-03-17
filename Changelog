@@ -3,7 +3,7 @@
 v0.2
 ====
 
-Imlement a class IndentityClient with the following methods:
+Implement a class IndentityClient with the following methods:
 
 * list_users
 * create_user
@@ -16,3 +16,11 @@ Imlement a class IndentityClient with the following methods:
 v0.3
 ====
 Implement a simple and minimal REST API
+Map VOs to Synnefo projects
+Cache user information in an LDAP directory
+Authenticate VOMS
+Create verified VOMS as Synnefo users, if they don't exist
+Renew Synnefo user tokens
+Augment response with Synnefo credentials (uuid, token,
+project id)
+Provide a deployment guide w.r.t. scalability and security
