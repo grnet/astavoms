@@ -14,6 +14,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import psycopg2
+import logging
+from functools import wraps
+
+logger = logging.getLogger(__name__)
 
 
 class Userpool:
@@ -36,59 +40,88 @@ class Userpool:
         self.conn.commit()
         self.conn.close()
 
+    def log_db_errors(func):
+        @wraps(func)
+        def wrap(self, *args, **kwargs):
+            try:
+                return func(self, *args, **kwargs)
+            except psycopg2.DatabaseError as db_err:
+                self.conn.rollback()
+                logger.info(
+                    '{err_type}: {e}'.format(err_type=type(db_err), e=db_err))
+                raise
+        return wrap
+
+    @log_db_errors
     def create_db(self):
         """Create the table in the database"""
-        try:
-            self.curs.execute(
-                'CREATE TABLE {table} ('
-                ' uuid varchar(64), UNIQUE(uuid),'
-                ' email varchar(64), UNIQUE(email),'
-                ' token varchar(64),'
-                ' used boolean)'.format(table=self.table))
-        except Exception as e:
-            self.conn.rollback()
-            print "FAILED", e
+        self.curs.execute(
+            'CREATE TABLE {table} ('
+            ' uuid varchar(64), UNIQUE(uuid),'
+            ' email varchar(64), UNIQUE(email),'
+            ' token varchar(64),'
+            ' used boolean)'.format(table=self.table))
 
-    def push(self, **user_info):
+    @log_db_errors
+    def push(self, uuid, email, token, used=0):
         """user_info: uuid=..., email=..., token=..."""
-        schema = "'{uuid}', '{email}', '{token}', '{used}'"
-        try:
-            self.curs.execute('INSERT INTO {table} VALUES ({vals})'.format(
-                table=self.table, vals=schema.format(**user_info)))
-        except Exception as e:
-            self.conn.rollback()
-            print "FAILED", e
+        values = "'{uuid}', '{email}', '{token}', '{used}'".format(
+            uuid=uuid, email=email, token=token, used=used)
+        self.curs.execute('INSERT INTO {table} VALUES ({values})'.format(
+            table=self.table, values=values))
 
+    @log_db_errors
     def pop(self):
-        """Pop a user from pool"""
-        try:
-            self.curs.execute(
-                "SELECT uuid, email, token FROM {table} "
-                "WHERE used='0' LIMIT 1".format(table=self.table))
-            uuid, email, token = self.curs.fetchall()[0]
-            self.curs.execute(
-                "UPDATE {table} SET used='1' WHERE uuid='{uuid}'".format(
-                    table=self.table, uuid=uuid))
-            return dict(uuid=uuid, email=email, token=token)
-        except Exception as e:
-            self.conn.rollback()
-            print "FAILED", e
+        """Pop a user from the pool"""
+        self.curs.execute(
+            "SELECT uuid, email, token FROM {table} "
+            "WHERE used='0' LIMIT 1".format(table=self.table))
+        uuid, email, token = self.curs.fetchall()[0]
+        self.curs.execute(
+            "UPDATE {table} SET used='1' WHERE uuid='{uuid}'".format(
+                table=self.table, uuid=uuid))
+        return dict(uuid=uuid, email=email, token=token)
 
+    @log_db_errors
     def update_token(self, uuid, new_token):
-        try:
-            self.curs.execute(
-                "UPDATE {table} SET token='{token}' "
-                "WHERE uuid='{uuid}'".format(
-                    table=self.table, token=new_token, uuid=uuid))
-        except Exception as e:
-            self.conn.rollback()
-            print "FAILED", e
+        """Update token for an existing (used of unused) account"""
+        self.curs.execute(
+            "UPDATE {table} SET token='{token}' WHERE uuid='{uuid}'".format(
+                table=self.table, token=new_token, uuid=uuid))
+
+    @log_db_errors
+    def batch_push(self, *users):
+        """users: {uuid=..., email=..., token=...}, ..."""
+        schema = "('{uuid}', '{email}', '{token}', '0')"
+        values = ','.join([schema.format(**u) for u in users])
+        self.curs.execute("INSERT INTO {table} VALUES {values}".format(
+            table=self.table, values=values))
+
+    @log_db_errors
+    def batch_update_token(self, *users):
+        """users: {uuid=..., token=...}, ..."""
+        template = "SELECT '{uuid}' as uuid, '{token}' as token"
+        data_table = ' UNION '.join([template.format(**u) for u in users])
+        self.curs.execute(
+            "UPDATE {table} SET token=data_table.token "
+            "FROM ({data_table}) AS data_table "
+            "WHERE {table}.uuid=data_table.uuid".format(
+                table=self.table, data_table=data_table))
 
 
 # with Userpool(
 #         dbname='astavoms', user='astavoms',
 #         host='localhost', password='asta-voms') as astavoms:
-    # astavoms.create_db()
-    # astavoms.push(uuid=1, email='lala@lele.org', token='mytoken', used=0)
-    # print astavoms.pop()
-    # astavoms.update_token(1, 'a grand new token')
+#     astavoms.create_db()
+#     astavoms.push(uuid=1, email='lala@lele.org', token='mytoken', used=0)
+#     print astavoms.pop()
+#     astavoms.update_token(1, 'a grand new token')
+#     astavoms.batch_push(
+#         dict(uuid=2, email='u2@lala.org', token='token2'),
+#         dict(uuid=3, email='u3@lala.org', token='token3'),
+#         dict(uuid=4, email='u4@lala.org', token='token4'),
+#     )
+#     astavoms.batch_update_token(
+#         dict(uuid=2, token='new token 02'),
+#         dict(uuid=9, token='new token 04'),
+#     )

@@ -16,6 +16,7 @@
 from flask import Flask, request, make_response, jsonify
 import logging
 import json
+from functools import wraps
 
 from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
@@ -104,6 +105,7 @@ def handle_invalid_usage(error):
 
 
 def log_errors(func):
+    @wraps(func)
     def wrap(*args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -116,7 +118,6 @@ def log_errors(func):
             else:
                 logger.info('{err_type}: {e}'.format(err_type=type(e), e=e))
             raise
-    wrap.__name__ = func.__name__
     return wrap
 
 
