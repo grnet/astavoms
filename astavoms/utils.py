@@ -39,3 +39,10 @@ def setup_logger(given_logger, debug=False, logfile=None, use_console=None):
         console_handler.setLevel(logging.DEBUG if debug else logging.ERROR)
         console_handler.setFormatter(minimal_format)
         given_logger.addHandler(console_handler)
+
+
+def strip_dict(d):
+    """:returns: (dict) a dict with all basestring values striped"""
+    return dict(map(
+        lambda (x, y): (x, y.strip() if isinstance(y, basestring) else y),
+        d.items()))

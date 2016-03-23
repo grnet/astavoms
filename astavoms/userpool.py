@@ -19,6 +19,8 @@ import csv
 import sys
 from functools import wraps
 
+from astavoms.utils import strip_dict
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,10 +67,18 @@ class Userpool:
             ' used boolean)'.format(table=self.table))
 
     @log_db_errors
+    def list(self, **filters):
+        """List pool users"""
+        conditions = ["{k}='{v}'".format(k=k, v=v) for k, v in filters.items()]
+        self.curs.execute("SELECT * FROM {table} WHERE {condition}".format(
+            table=self.table, condition=' AND '.join(conditions) or '1'))
+        return self.curs.fetchall()
+
+    @log_db_errors
     def push(self, uuid, email, token, used=0):
         """user_info: uuid=..., email=..., token=..."""
         values = "'{uuid}', '{email}', '{token}', '{used}'".format(
-            uuid=uuid, email=email, token=token, used=used)
+            **strip_dict(dict(uuid=uuid, email=email, token=token, used=used)))
         self.curs.execute('INSERT INTO {table} VALUES ({values})'.format(
             table=self.table, values=values))
 
@@ -76,7 +86,7 @@ class Userpool:
     def batch_push(self, *users):
         """users: {uuid=..., email=..., token=...}, ..."""
         schema = "('{uuid}', '{email}', '{token}', '0')"
-        values = ','.join([schema.format(**u) for u in users])
+        values = ','.join([schema.format(**strip_dict(u)) for u in users])
         self.curs.execute("INSERT INTO {table} VALUES {values}".format(
             table=self.table, values=values))
 
@@ -100,13 +110,14 @@ class Userpool:
         self.curs.execute(
             "UPDATE {table} SET token='{token}' "
             "WHERE uuid='{uuid}'".format(
-                table=self.table, token=token, uuid=uuid))
+                table=self.table, token=token.strip(), uuid=uuid.strip()))
 
     @log_db_errors
     def batch_update_token(self, *users):
         """users: {uuid=..., token=...}, ..."""
         template = "SELECT '{uuid}' as uuid, '{token}' as token"
-        data_table = ' UNION '.join([template.format(**u) for u in users])
+        data_table = ' UNION '.join(
+            [template.format(**strip_dict(u)) for u in users])
         self.curs.execute(
             "UPDATE {table} SET token=data_table.token "
             "FROM ({data_table}) AS data_table "
@@ -144,6 +155,22 @@ def update(**db_info):
             pool.batch_update_token(*users)
 
 
+def _list(db_info, **filters):
+    with Userpool(**db_info) as pool:
+        for u in pool.list(**filters):
+            sys.stdout.write(' , '.join(['{0}'.format(i) for i in u]) + '\n')
+
+
+def list_unused(**db_info):
+    """List unused users"""
+    return _list(db_info, used='0')
+
+
+def list_used(**db_info):
+    """List unused users"""
+    return _list(db_info, used='1')
+
+
 def cli():
     """A CLI for managing users"""
     import argparse
@@ -161,20 +188,28 @@ def cli():
 
     # create
     sp_create = sp.add_parser('create', help='Create new pool (aka database)')
-    sp_create.set_defaults(func=create, cmd='create')
+    sp_create.set_defaults(func=create)
+
+    # list unused accounts
+    sp_unused = sp.add_parser('unused', help='List unused accounts')
+    sp_unused.set_defaults(func=list_unused)
+
+    # list used accounts
+    sp_used = sp.add_parser('used', help='List used accounts')
+    sp_used.set_defaults(func=list_used)
 
     # push
     sp_push = sp.add_parser(
         'push',
         help='Pipe CSV file (uuid,email,token) or type in stdin')
-    sp_push.set_defaults(func=push, cmd='push')
+    sp_push.set_defaults(func=push)
 
     # update
     sp_update = sp.add_parser(
         'update',
         help='Update user token(s).     '
              'Pipe CSV file (uuid, new-token) or type in stdin')
-    sp_update.set_defaults(func=update, cmd='update')
+    sp_update.set_defaults(func=update)
 
     pargs = parser.parse_args()
     pargs.func(

@@ -55,5 +55,4 @@ setup(
     install_requires=[
         'kamaki', 'python-ldap', 'Flask', 'M2Crypto', 'psycopg2',
     ]
-    # apt-get install libvomsapi1 ///swig
 )
