@@ -15,6 +15,8 @@
 
 import psycopg2
 import logging
+import csv
+import sys
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -71,6 +73,14 @@ class Userpool:
             table=self.table, values=values))
 
     @log_db_errors
+    def batch_push(self, *users):
+        """users: {uuid=..., email=..., token=...}, ..."""
+        schema = "('{uuid}', '{email}', '{token}', '0')"
+        values = ','.join([schema.format(**u) for u in users])
+        self.curs.execute("INSERT INTO {table} VALUES {values}".format(
+            table=self.table, values=values))
+
+    @log_db_errors
     def pop(self):
         """Pop a user from the pool"""
         update_query = (
@@ -86,19 +96,11 @@ class Userpool:
         return dict(uuid=uuid, email=email, token=token)
 
     @log_db_errors
-    def update_token(self, uuid, new_token):
-        """Update token for an existing (used of unused) account"""
+    def update_token(self, uuid, token):
         self.curs.execute(
-            "UPDATE {table} SET token='{token}' WHERE uuid='{uuid}'".format(
-                table=self.table, token=new_token, uuid=uuid))
-
-    @log_db_errors
-    def batch_push(self, *users):
-        """users: {uuid=..., email=..., token=...}, ..."""
-        schema = "('{uuid}', '{email}', '{token}', '0')"
-        values = ','.join([schema.format(**u) for u in users])
-        self.curs.execute("INSERT INTO {table} VALUES {values}".format(
-            table=self.table, values=values))
+            "UPDATE {table} SET token='{token}' "
+            "WHERE uuid='{uuid}'".format(
+                table=self.table, token=token, uuid=uuid))
 
     @log_db_errors
     def batch_update_token(self, *users):
@@ -112,19 +114,75 @@ class Userpool:
                 table=self.table, data_table=data_table))
 
 
-# with Userpool(
-#         dbname='astavoms', user='astavoms',
-#         host='localhost', password='asta-voms') as astavoms:
-#     astavoms.create_db()
-#     astavoms.push(uuid=5, email='u5@lele.org', token='mytoken5')
-#     print astavoms.pop()
-#     astavoms.update_token(1, 'a grand new token')
-#     astavoms.batch_push(
-#         dict(uuid=2, email='u2@lala.org', token='token2'),
-#         dict(uuid=3, email='u3@lala.org', token='token3'),
-#         dict(uuid=4, email='u4@lala.org', token='token4'),
-#     )
-#     astavoms.batch_update_token(
-#         dict(uuid=2, token='new token 02'),
-#         dict(uuid=9, token='new token 04'),
-#     )
+def create(**db_info):
+    """Create a new db"""
+    with Userpool(**db_info) as pool:
+        pool.create_db()
+
+
+def push(**db_info):
+    """Push empty users in the pool"""
+    users = csv.reader(sys.stdin)
+    users = [dict(zip(('uuid', 'email', 'token'), u)) for u in users]
+    with Userpool(**db_info) as pool:
+        if len(users) == 1:
+            user = users[0]
+            pool.push(**user)
+        else:
+            pool.batch_push(*users)
+
+
+def update(**db_info):
+    """Update given users with new tokens"""
+    users = csv.reader(sys.stdin)
+    users = [dict(zip(('uuid', 'token'), u)) for u in users]
+    with Userpool(**db_info) as pool:
+        if len(users) == 1:
+            user = users[0]
+            pool.update_token(**user)
+        else:
+            pool.batch_update_token(*users)
+
+
+def cli():
+    """A CLI for managing users"""
+    import argparse
+    from astavoms.utils import setup_logger
+
+    setup_logger(logger)
+
+    parser = argparse.ArgumentParser()
+    sp = parser.add_subparsers()
+    parser.add_argument('--dbname', help='Postgress DB name', required=True)
+    parser.add_argument('--user', help='Postgres DB user', required=True)
+    parser.add_argument(
+        '--host', help='default: localhost', default='localhost')
+    parser.add_argument('--password', help='User password, default: empty')
+
+    # create
+    sp_create = sp.add_parser('create', help='Create new pool (aka database)')
+    sp_create.set_defaults(func=create, cmd='create')
+
+    # push
+    sp_push = sp.add_parser(
+        'push',
+        help='Pipe CSV file (uuid,email,token) or type in stdin')
+    sp_push.set_defaults(func=push, cmd='push')
+
+    # update
+    sp_update = sp.add_parser(
+        'update',
+        help='Update user token(s).     '
+             'Pipe CSV file (uuid, new-token) or type in stdin')
+    sp_update.set_defaults(func=update, cmd='update')
+
+    pargs = parser.parse_args()
+    pargs.func(
+        dbname=pargs.dbname,
+        user=pargs.user,
+        host=pargs.host,
+        password=pargs.password)
+
+
+if __name__ == '__main__':
+    cli()

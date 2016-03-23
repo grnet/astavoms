@@ -49,10 +49,11 @@ setup(
     entry_points={
         'console_scripts': [
             'astavoms-server = astavoms.daemon:cli',
+            'astavoms-pool = astavoms.userpool:cli',
         ]
     },
     install_requires=[
-        'kamaki', 'python-ldap', 'Flask', 'M2Crypto', 'spycopg2',
+        'kamaki', 'python-ldap', 'Flask', 'M2Crypto', 'psycopg2',
     ]
     # apt-get install libvomsapi1 ///swig
 )

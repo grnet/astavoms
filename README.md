@@ -18,6 +18,9 @@ Assuming a debian-like system, the following packages are required:
 
 // For voms_helper
 # apt-get install libvomsapi1
+
+// For postgress
+# apt-get install postgresql-server-dev-all python-psycopg2
 ```
 
 There are two modes of deployment: for testing/development and full scale.
@@ -66,6 +69,8 @@ http://docs.astakostest.apiary.io/ ) for user creation and token refreshment (as
 An LDAP driver for accessing and updating an LDAP directory (astavoms.ldapuser)
 
 A kamaki extension for dealing with an astavoms service (astavomaki)
+
+A CLI tool (astavoms-pool) for managing the user pool
 
 TODO: a tool for (manually) updating VOs and, maybe, VO users
 
