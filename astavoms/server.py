@@ -20,6 +20,7 @@ from functools import wraps
 
 from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
+from astavoms.userpool import Userpool, UserpoolError
 from kamaki.clients import ClientError as SynnefoError
 
 app = Flask(__name__)
@@ -275,25 +276,35 @@ def authenticate():
             logger.debug('LDAP User: {user}'.format(user=user))
 
             if not user:
-                logger.info('No such user in LDAP, look up in Synnefo')
-                email = dn_to_email(dn)
-
+                logger.info('No such user in LDAP, pop from pool')
+                pool_args = settings['pool_args']
+                logger.debug('Pool args: {0}'.format(pool_args))
                 try:
-                    snf_uuid = snf_admin.get_client().get_uuid(email)
-                    logger.info('SNF user exists, renew token')
-                    snf_user = snf_admin.renew_user_token(snf_uuid)
-                except SynnefoError as se:
-                    if getattr(se, 'status') not in (404, 500, ):
-                        # For some reason, AstakosClient.get_uuid returns 500
-                        raise
-                    logger.debug('SNF: {err} {status}'.format(
-                        err=se, status=getattr(se, 'status')))
-                    logger.info('SNF user not found')
-                    snf_user = create_snf_user(
-                        snf_admin, dn, vo, email, project_id)
-                    response_code = 202
-
-                snf_uuid, snf_token = snf_user['id'], snf_user['auth_token']
+                    with Userpool(**pool_args) as pool:
+                        user = pool.pop()
+                    snf_uuid, snf_token = user['uuid'], user['token']
+                    email = user['email']
+                except UserpoolError as upe:
+                    logger.info('Failed to pop from user pool')
+                    logger.debug('Userpool error: {0}'.format(upe))
+                    logger.info('Create user')
+                    email = dn_to_email(dn)
+                    try:
+                        snf_uuid = snf_admin.get_client().get_uuid(email)
+                        logger.info('SNF user exists, renew token')
+                        snf_user = snf_admin.renew_user_token(snf_uuid)
+                    except SynnefoError as se:
+                        if getattr(se, 'status') not in (404, 500, ):
+                            # AstakosClient.get_uuid returns 500
+                            raise
+                        logger.debug('SNF: {err} {status}'.format(
+                            err=se, status=getattr(se, 'status')))
+                        logger.info('SNF user not found')
+                        snf_user = create_snf_user(
+                            snf_admin, pool_args, dn, vo, email, project_id)
+                        response_code = 202
+                    snf_uuid = snf_user['id']
+                    snf_token = snf_user['auth_token']
                 logger.info('Store user in LDAP')
                 ldap_user.create(
                     snf_uuid=snf_uuid, snf_token=snf_token, mail=email,
@@ -321,24 +332,9 @@ def authenticate():
                         ldap_user.update_snf_token(snf_uuid, snf_token)
                     except SynnefoError as no_user:
                         status = getattr(no_user, 'status')
-                        if status not in (404, 500, ):
-                            raise
                         logger.debug('SNF: {error} {status}'.format(
                             error=no_user, status=status))
                         logger.info('SNF: user not found')
-                        snf_user = create_snf_user(
-                            snf_admin, dn, vo, email, project_id)
-                        logger.debug('Created SNF user {user}'.format(
-                            user=snf_user))
-                        snf_old_uuid, snf_uuid = snf_uuid, snf_user['id']
-                        snf_token = snf_user['auth_token']
-                        logger.info('Remove user from LDAP')
-                        ldap_user.delete_user(snf_old_uuid)
-                        logger.info('Store user in LDAP')
-                        ldap_user.create(
-                            snf_uuid=snf_uuid, snf_token=snf_token,
-                            mail=email, cn=dn_to_cn(dn), vo=vo, user_dn=dn)
-                        response_code = 202
 
             if project_id:
                 logger.info('Enroll user to project')

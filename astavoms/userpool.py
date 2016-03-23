@@ -24,6 +24,10 @@ from astavoms.utils import strip_dict
 logger = logging.getLogger(__name__)
 
 
+class UserpoolError(Exception):
+    """Userpool error"""
+
+
 class Userpool:
     """Context manager to push/pop users against a PostgresQL database"""
     table = 'userpool'

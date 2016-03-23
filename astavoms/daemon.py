@@ -84,6 +84,12 @@ def run(settings):
         password=settings.get('ldap_password'),
         base_dn=settings.get('ldap_base_dn')
     )
+    pool_args = dict(
+        dbname=settings.get('pool_name'),
+        host=settings.get('pool_host'),
+        user=settings.get('pool_user'),
+        password=settings.get('pool_password'),
+    )
     voms_args = dict([(k, v) for k, v in settings.items() if k in (
         'voms_policy', 'voms_dir', 'ca_path', 'voms_api_lib')])
 
@@ -99,6 +105,7 @@ def run(settings):
 
     server.ASTAVOMS_SERVER_SETTINGS.update(dict(
         ldap_args=ldap_args,
+        pool_args=pool_args,
         vomsauth=authvoms.VomsAuth(**voms_args),
         snf_admin=snf_admin,
         vo_projects=vo_projects,
@@ -162,6 +169,14 @@ def cli():
     sp_start.add_argument('--ldap-url', help='address of LDAP server')
     sp_start.add_argument('--ldap-admin', help='LDAP admin user name')
     sp_start.add_argument('--ldap-password', help='LDAP admin password')
+    sp_start.add_argument(
+        '--pool-name', help='Name of pool (aka DBname), default: astavoms')
+    sp_start.add_argument(
+        '--pool-host', help='Pool (DB) host (default: localhost)')
+    sp_start.add_argument(
+        '--pool-user', help='Pool (DB) user name, default: astavoms')
+    sp_start.add_argument(
+        '--pool-password', help='Pool (DB) user password, default: astavoms')
     sp_start.add_argument('--snf-auth-url', help='Synnefo Authentication URL')
     sp_start.add_argument('--snf-admin-token', help='Synnefo admin token')
     sp_start.add_argument('--vo-projects', help='Path to VO-projects json map')
@@ -195,6 +210,10 @@ def cli():
         ldap_admin=os.getenv('ASTAVOMS_LDAP_ADMIN', None),
         ldap_password=os.getenv('ASTAVOMS_LDAP_PASSWORD', None),
         ldap_base_dn=os.getenv('ASTAVOMS_LDAP_BASE_DN', None),
+        pool_name=os.getenv('ASTAVOMS_POOL_NAME', None),
+        pool_host=os.getenv('ASTAVOMS_POOL_HOST', None),
+        pool_user=os.getenv('ASTAVOMS_POOL_USER', None),
+        pool_password=os.getenv('ASTAVOMS_POOL_PASSWORD', None),
         snf_auth_url=os.getenv('ASTAVOMS_SNF_AUTH_URL', None),
         snf_admin_token=os.getenv('ASTAVOMS_SNF_ADMIN_TOKEN', None),
         vo_projects=os.getenv('ASTAVOMS_VO_PROJECTS'),
@@ -212,6 +231,8 @@ def cli():
         disable_voms_verification=False,
         ldap_url='ldap://localhost',
         ldap_admin='', ldap_password='', ldap_base_dn='',
+        pool_name='astavoms', pool_host='localhost',
+        pool_user='astavoms', pool_password='astavoms',
         snf_auth_url='', snf_admin_token='',
         vo_projects='/etc/astavoms/vo_projects.json',
         snf_ca_certs='', snf_ignore_ssl=False,

@@ -32,6 +32,12 @@ ldap_args = dict(
     password=settings.get('ldap_password'),
     base_dn=settings.get('ldap_base_dn')
 )
+pool_args = dict(
+    dbname=settings.get('pool_name'),
+    host=settings.get('pool_host'),
+    user=settings.get('pool_user'),
+    password=settings.get('pool_password'),
+)
 voms_args = dict([(k, v) for k, v in settings.items() if k in (
     'voms_policy', 'voms_dir', 'ca_path', 'voms_api_lib')])
 
@@ -48,6 +54,7 @@ vo_projects = settings.get('vo_projects', '/etc/astavoms/vo_projects.json')
 
 server.ASTAVOMS_SERVER_SETTINGS.update(dict(
     ldap_args=ldap_args,
+    pool_args=pool_args,
     vomsauth=authvoms.VomsAuth(**voms_args),
     snf_admin=snf_admin,
     vo_projects=vo_projects,

@@ -28,7 +28,8 @@ Install required packages
   # apt-get update
   # apt-get install python python-pip apache2 git gunicorn python-ldap \
     build-essential libsasl2-dev python-dev libldap2-dev libssl-dev swig \
-    libvomsapi1
+    libvomsapi1 postgresql postgresql-client postgresql-server-dev-all \
+    python-psycopg2
 
 Clone the astavoms repository to a directory of your choice. In this guide we
 'll use ``/var/tmp/``
@@ -70,6 +71,10 @@ are mandatory, as described below
     "snf_ca_certs": "/etc/ssl/certs/synnefo_ca.pem",
 
     #  Settings with default values
+    "pool_name": "astavoms",
+    "pool_host": "localhost",
+    "pool_user": "astavoms",
+    "pool_password": "astavoms",
     "vo_projects": "/etc/astavoms/vo_projects.json",
     "disable_voms_verification": false,
     "voms_policy": "/etc/astavoms/voms.json",
@@ -79,6 +84,30 @@ are mandatory, as described below
     "logfile": "/var/log/astavoms/server.log",
     "debug": false
   }
+
+Astavoms runs along with a postgresql database serving as a pool of users.
+First, create a database user (change the password and, possibly, the user
+and the database name to fit your needs):
+
+.. code-block:: console
+
+  # sudo -u postgres psql
+  _# CREATE USER astavoms WITH PASSWORD 'astavoms';
+  _# CREATE DATABASE astavoms;
+  _# GRANT ALL PRIVILEGES ON DATABASE astavoms TO astavoms;
+  # astavoms-pool --dbname astavoms --user astavoms --password astavoms create
+
+To feed the pool with unused accounts, create a CSV file (e.g., "users.csv") of the form::
+
+  example-uuid-1234,user1234@example.org,token-for-user-1234
+  example-uuid-5678,user5678@example.org,token-for-user-5678
+  example-uuid-9012,user9012@example.org,token-for-user-9012
+
+and feed it to astavoms-pool:
+
+.. code-block:: console
+
+  # astavoms-pool --dbname astavoms --user astavoms --password astavoms push < users.csv
 
 VOMS support requires some extra configuration.
 
