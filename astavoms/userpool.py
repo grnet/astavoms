@@ -99,7 +99,7 @@ class Userpool:
         """Pop a user from the pool"""
         update_query = (
             "UPDATE {table} t SET used='1' FROM ("
-            " SELECT * FROM userpool WHERE used='0' LIMIT 1) pool "
+            " SELECT * FROM {table} WHERE used='0' LIMIT 1) pool "
             "WHERE pool.uuid=t.uuid "
             "RETURNING pool.uuid, pool.email, pool.token".format(
                 table=self.table))

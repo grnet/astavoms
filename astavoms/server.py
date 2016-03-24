@@ -275,10 +275,11 @@ def authenticate():
             user = ldap_user.search_by_voms(dn, vo)
             logger.debug('LDAP User: {user}'.format(user=user))
 
+            pool_args = settings['pool_args']
+            logger.debug('Pool args: {0}'.format(pool_args))
+
             if not user:
                 logger.info('No such user in LDAP, pop from pool')
-                pool_args = settings['pool_args']
-                logger.debug('Pool args: {0}'.format(pool_args))
                 try:
                     with Userpool(**pool_args) as pool:
                         user = pool.pop()
@@ -311,11 +312,15 @@ def authenticate():
                     cn=dn_to_cn(dn), vo=vo, user_dn=dn)
             else:
                 logger.info('Authenticate Synnefo User')
-                user = user[0][1]
                 email = user['mail'][0]
-                snf_user = dict(
-                    id=user['uid'][0], auth_token=user['userPassword'][0])
-                snf_uuid, snf_token = snf_user['id'], snf_user['auth_token']
+                ldap_user = user[0][1]
+                snf_uuid = ldap_user['uid'][0]
+                snf_token = ldap_user['userPassword'][0]
+                with Userpool(**pool_args) as pool:
+                    user = pool.list(uuid=snf_uuid)[0]
+                if user['token'] != snf_token:
+                    snf_token = user['token']
+                    ldap_user.update_snf_token(snf_uuid, snf_token)
                 try:
                     snf_admin.authenticate(snf_token)
                 except SynnefoError as se:
