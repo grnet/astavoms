@@ -73,13 +73,16 @@ class Userpool:
     @log_db_errors
     def pop(self):
         """Pop a user from the pool"""
+        update_query = (
+            "UPDATE {table} t SET used='1' FROM ("
+            " SELECT * FROM userpool WHERE used='0' LIMIT 1) pool "
+            "WHERE pool.uuid=t.uuid "
+            "RETURNING pool.uuid, pool.email, pool.token".format(
+                table=self.table))
         self.curs.execute(
-            "SELECT uuid, email, token FROM {table} "
-            "WHERE used='0' LIMIT 1".format(table=self.table))
+            "WITH upd AS ({update_query}) SELECT * FROM upd".format(
+                update_query=update_query))
         uuid, email, token = self.curs.fetchall()[0]
-        self.curs.execute(
-            "UPDATE {table} SET used='1' WHERE uuid='{uuid}'".format(
-                table=self.table, uuid=uuid))
         return dict(uuid=uuid, email=email, token=token)
 
     @log_db_errors
@@ -113,7 +116,7 @@ class Userpool:
 #         dbname='astavoms', user='astavoms',
 #         host='localhost', password='asta-voms') as astavoms:
 #     astavoms.create_db()
-#     astavoms.push(uuid=1, email='lala@lele.org', token='mytoken', used=0)
+#     astavoms.push(uuid=5, email='u5@lele.org', token='mytoken5')
 #     print astavoms.pop()
 #     astavoms.update_token(1, 'a grand new token')
 #     astavoms.batch_push(
