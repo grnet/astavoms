@@ -75,7 +75,7 @@ class Userpool:
         """List pool users"""
         conditions = ["{k}='{v}'".format(k=k, v=v) for k, v in filters.items()]
         self.curs.execute("SELECT * FROM {table} WHERE {condition}".format(
-            table=self.table, condition=' AND '.join(conditions) or '1'))
+            table=self.table, condition=' AND '.join(conditions) or "'t'"))
         return self.curs.fetchall()
 
     @log_db_errors
