@@ -69,6 +69,8 @@ class Userpool:
             ' email varchar(64), UNIQUE(email),'
             ' token varchar(64),'
             ' used boolean)'.format(table=self.table))
+        self.curs.execute('CREATE INDEX used_index ON {table}(used)'.format(
+            table=self.table))
 
     @log_db_errors
     def list(self, **filters):
