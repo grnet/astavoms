@@ -32,8 +32,9 @@ class Userpool:
     """Context manager to push/pop users against a PostgresQL database"""
     table = 'userpool'
 
-    def __init__(self, **db_info):
+    def __init__(self, dryrun=False, **db_info):
         self.db_info = db_info
+        self.dryrun = dryrun
 
     def __enter__(self):
         self.conn = psycopg2.connect(
@@ -45,7 +46,10 @@ class Userpool:
         return self
 
     def __exit__(self, type, value, traceback):
-        self.conn.commit()
+        if self.dryrun:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
         self.conn.close()
 
     def log_db_errors(func):
@@ -194,6 +198,8 @@ def cli():
     parser.add_argument(
         '--host', help='default: localhost', default='localhost')
     parser.add_argument('--password', help='User password, default: empty')
+    parser.add_argument(
+        '--dryrun', help='User password, default: false', action='store_true')
 
     # create
     sp_create = sp.add_parser('create', help='Create new pool (aka database)')
@@ -221,6 +227,7 @@ def cli():
 
     pargs = parser.parse_args()
     pargs.func(
+        dryrun=pargs.dryrun,
         dbname=pargs.dbname,
         user=pargs.user,
         host=pargs.host,
