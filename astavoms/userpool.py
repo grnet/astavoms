@@ -163,9 +163,11 @@ def update(**db_info):
 
 
 def _list(db_info, **filters):
+    sys.stderr.write('uuid,email,token,used\n---------------------\n')
+    w = csv.writer(sys.stdout)
     with Userpool(**db_info) as pool:
         for u in pool.list(**filters):
-            sys.stdout.write(' , '.join(['{0}'.format(i) for i in u]) + '\n')
+            w.writerow(u)
 
 
 def list_unused(**db_info):
