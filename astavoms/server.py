@@ -145,7 +145,12 @@ def _check_request_data(voms_credentials):
 
 
 def dn_to_cn(dn):
-    return dn.split('/')[-1].split('=')[-1]
+    """
+    :param dn: (str) e.g., "C=org/O=example/CN=Tyler Durden/cn=1234/CN=5678"
+    :returns: e.g., "Tyler Durden.1234.5678" ...
+    """
+    pairs = [s.split('=') for s in dn.split('/') if '=' in s]
+    return '.'.join([v.strip() for (k, v) in pairs if k.upper() == 'CN'])
 
 
 def phrase_to_str(phrase):
@@ -158,8 +163,14 @@ def dn_to_email(dn):
     :returns: (str) email in form user_cn@...v2.v1
     """
     terms = [term.split('=') for term in dn.split('/') if term.strip()]
-    left = phrase_to_str(terms[-1][1])
-    right = '.'.join([phrase_to_str(term[1]) for term in reversed(terms[:-1])])
+    left_terms, right_terms = [], []
+    for k, v in terms:
+        if k.upper() == 'CN':
+            left_terms.append(v)
+        else:
+            right_terms.append(v)
+    left = phrase_to_str('.'.join(left_terms))
+    right = phrase_to_str('.'.join(reversed(right_terms)))
     return '{left}@{right}'.format(left=left, right=right)
 
 
@@ -176,7 +187,7 @@ def create_snf_user(snf_admin, dn, vo, email, project=None):
     kw = dict(
         username=email,
         first_name=name[0],
-        last_name=''.join(name[1]),
+        last_name=' '.join(name[1:]),
         affiliation=vo,
     )
     logger.info(
@@ -215,9 +226,6 @@ def authenticate():
             "user": ..., "userca": ..., "serial": ...,
             "fqans": [...], "not_after": ..., "not_before": ...
         }
-
-        Errors:
-            TODO
     """
     logger.info('POST /authenticate')
     logger.debug('data: {data}'.format(data=request.data))
@@ -313,9 +321,8 @@ def authenticate():
             else:
                 logger.info('Authenticate Synnefo User')
                 email = user['mail'][0]
-                ldap_user = user[0][1]
-                snf_uuid = ldap_user['uid'][0]
-                snf_token = ldap_user['userPassword'][0]
+                snf_uuid = user['uid'][0]
+                snf_token = user['userPassword'][0]
                 with Userpool(**pool_args) as pool:
                     user = pool.list(uuid=snf_uuid)[0]
                 if user['token'] != snf_token:
