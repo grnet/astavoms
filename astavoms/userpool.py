@@ -110,7 +110,7 @@ class Userpool:
         return dict(uuid=uuid, email=email, token=token)
 
     @log_db_errors
-    def update_token(self, uuid, token):
+    def update_token(self, uuid, email, token):
         self.curs.execute(
             "UPDATE {table} SET token='{token}' "
             "WHERE uuid='{uuid}'".format(
@@ -118,8 +118,9 @@ class Userpool:
 
     @log_db_errors
     def batch_update_token(self, *users):
-        """users: {uuid=..., token=...}, ..."""
-        template = "SELECT '{uuid}' as uuid, '{token}' as token"
+        """users: {uuid=..., email=..., token=...}, ..."""
+        template = (
+            "SELECT '{uuid}' as uuid, '{email}' as email, '{token}' as token")
         data_table = ' UNION '.join(
             [template.format(**strip_dict(u)) for u in users])
         self.curs.execute(
@@ -150,7 +151,7 @@ def push(**db_info):
 def update(**db_info):
     """Update given users with new tokens"""
     users = csv.reader(sys.stdin)
-    users = [dict(zip(('uuid', 'token'), u)) for u in users]
+    users = [dict(zip(('uuid', 'email', 'token'), u)) for u in users]
     with Userpool(**db_info) as pool:
         if len(users) == 1:
             user = users[0]
@@ -204,8 +205,7 @@ def cli():
 
     # push
     sp_push = sp.add_parser(
-        'push',
-        help='Pipe CSV file (uuid,email,token) or type in stdin')
+        'push', help='Pipe CSV file (uuid,email,token) or type in stdin')
     sp_push.set_defaults(func=push)
 
     # update

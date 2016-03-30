@@ -105,7 +105,7 @@ class UserpoolTest(unittest.TestCase):
             u2 = ('uuid2', 'email2', 'token2', True)
             pool.push(*u2)
             new_token = 'new token'
-            pool.update_token(u1[0], new_token)
+            pool.update_token(u1[0], u1[1], new_token)
             u1 = (u1[0], u1[1], new_token, u1[3])
             self.assertEquals(set(pool.list()), set([u1, u2]))
 
