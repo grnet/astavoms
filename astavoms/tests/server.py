@@ -216,7 +216,7 @@ class AuthenticateTest(unittest.TestCase):
             ldapuser, ldapuser_exit, userpool, userpool_exit):
         """When incoming user exists in LDAP"""
         def search_by_voms(*args, **kwargs):
-            return ldap_user
+            return [('ldap uuid', ldap_user)]
         LDAPUserMock.search_by_voms = search_by_voms
 
         def pop(*args, **kwargs):

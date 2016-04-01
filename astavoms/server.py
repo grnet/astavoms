@@ -320,13 +320,14 @@ def authenticate():
                     cn=dn_to_cn(dn), vo=vo, user_dn=dn)
             else:
                 logger.info('Authenticate Synnefo User')
+                user = user[0][1]
                 email = user['mail'][0]
                 snf_uuid = user['uid'][0]
                 snf_token = user['userPassword'][0]
                 with Userpool(**pool_args) as pool:
                     user = pool.list(uuid=snf_uuid)[0]
-                if user['token'] != snf_token:
-                    snf_token = user['token']
+                if user[2] != snf_token:
+                    snf_token = user[2]
                     ldap_user.update_snf_token(snf_uuid, snf_token)
                 try:
                     snf_admin.authenticate(snf_token)
