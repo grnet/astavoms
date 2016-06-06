@@ -340,6 +340,22 @@ def authenticate():
     return make_response(jsonify(response_data), response_code)
 
 
+@app.route('/v2.0/tokens', methods=['POST', ])
+@log_errors
+def tokens():
+    response_code = 200
+    response_data = {"tokens": True}
+    return make_response(jsonify(response_data), response_code)
+
+
+@app.route('/v2.0/tennants', methods=['POST', ])
+@log_errors
+def tennants():
+    response_code = 200
+    response_data = {"tennants": True}
+    return make_response(jsonify(response_data), response_code)
+
+
 # For testing
 if __name__ == '__main__':
     import argparse
