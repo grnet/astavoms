@@ -22,6 +22,7 @@ from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
 from astavoms.userpool import Userpool, UserpoolError
 from kamaki.clients import ClientError as SynnefoError
+from astavoms import utils
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -144,36 +145,6 @@ def _check_request_data(voms_credentials):
         raise AstavomsInvalidInput(err_msg, payload=payload)
 
 
-def dn_to_cn(dn):
-    """
-    :param dn: (str) e.g., "C=org/O=example/CN=Tyler Durden/cn=1234/CN=5678"
-    :returns: e.g., "Tyler Durden.1234.5678" ...
-    """
-    pairs = [s.split('=') for s in dn.split('/') if '=' in s]
-    return '.'.join([v.strip() for (k, v) in pairs if k.upper() == 'CN'])
-
-
-def phrase_to_str(phrase):
-    return phrase.strip().replace(' ', '_')
-
-
-def dn_to_email(dn):
-    """
-    :param dn: (str) user dn in /k1=v1/k2=v2/.../cn=user_cn form
-    :returns: (str) email in form user_cn@...v2.v1
-    """
-    terms = [term.split('=') for term in dn.split('/') if term.strip()]
-    left_terms, right_terms = [], []
-    for k, v in terms:
-        if k.upper() == 'CN':
-            left_terms.append(v)
-        else:
-            right_terms.append(v)
-    left = phrase_to_str('.'.join(left_terms))
-    right = phrase_to_str('.'.join(reversed(right_terms)))
-    return '{left}@{right}'.format(left=left, right=right)
-
-
 def create_snf_user(snf_admin, dn, vo, email, project=None):
     """
     :param snf_admin: (IdentityClient)
@@ -183,7 +154,7 @@ def create_snf_user(snf_admin, dn, vo, email, project=None):
     :param project: (str) extra project id to enroll user to
     :returns: {'id': ..., 'auth_token': ...}
     """
-    name = dn_to_cn(dn).split(' ')
+    name = utils.dn_to_cn(dn).split(' ')
     kw = dict(
         username=email,
         first_name=name[0],
@@ -251,6 +222,7 @@ def authenticate():
 
     logger.info('Get Synnefo admin client')
     snf_admin = settings['snf_admin']
+
     logger.info('Check SNF admin credentials')
     try:
         snf_admin.authenticate()
@@ -297,7 +269,7 @@ def authenticate():
                     logger.info('Failed to pop from user pool')
                     logger.debug('Userpool error: {0}'.format(upe))
                     logger.info('Create user')
-                    email = dn_to_email(dn)
+                    email = utils.dn_to_email(dn)
                     try:
                         snf_uuid = snf_admin.get_client().get_uuid(email)
                         logger.info('SNF user exists, renew token')
@@ -317,7 +289,7 @@ def authenticate():
                 logger.info('Store user in LDAP')
                 ldap_user.create(
                     snf_uuid=snf_uuid, snf_token=snf_token, mail=email,
-                    cn=dn_to_cn(dn), vo=vo, user_dn=dn)
+                    cn=utils.dn_to_cn(dn), vo=vo, user_dn=dn)
             else:
                 logger.info('Authenticate Synnefo User')
                 user = user[0][1]

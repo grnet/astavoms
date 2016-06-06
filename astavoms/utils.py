@@ -46,3 +46,29 @@ def strip_dict(d):
     return dict(map(
         lambda (x, y): (x, y.strip() if isinstance(y, basestring) else y),
         d.items()))
+
+
+def dn_to_cn(dn):
+    """
+    :param dn: (str) e.g., "C=org/O=example/CN=Tyler Durden/cn=1234/CN=5678"
+    :returns: e.g., "Tyler Durden.1234.5678" ...
+    """
+    pairs = [s.split('=') for s in dn.split('/') if '=' in s]
+    return '.'.join([v.strip() for (k, v) in pairs if k.upper() == 'CN'])
+
+
+def dn_to_email(dn):
+    """
+    :param dn: (str) user dn in /k1=v1/k2=v2/.../cn=user_cn form
+    :returns: (str) email in form user_cn@...v2.v1
+    """
+    terms = [term.split('=') for term in dn.split('/') if term.strip()]
+    left_terms, right_terms = [], []
+    for k, v in terms:
+        if k.upper() == 'CN':
+            left_terms.append(v)
+        else:
+            right_terms.append(v)
+    left = phrase_to_str('.'.join(left_terms))
+    right = phrase_to_str('.'.join(reversed(right_terms)))
+    return '{left}@{right}'.format(left=left, right=right)
