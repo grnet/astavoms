@@ -62,6 +62,9 @@ class AstavomsInvalidInput(AstavomsRESTError):
     """Input is missing some elements"""
     status_code = 400  # Bad request
 
+class AstavomsInvalidProxy(AstavomsRESTError):
+    """Client proxy certificates are not well formated or missing"""
+    status_code = 400  # Bad request
 
 class AstavomsUnknownVO(AstavomsRESTError):
     """Virtual Organization not in dictionary"""
@@ -180,38 +183,15 @@ def enroll_to_project(snf_admin, email, project):
             raise
         logger.debug('User is already enrolled')
 
-
-@app.route('/authenticate', methods=['POST', ])
-@log_errors
-def authenticate():
-    """POST /authenticate
-        X-Auth-Token: <token for authorized snf-EGI application>
-        {"dn": ..., "cert": ..., "chain": ...}
-
-        Response:
-        201 ACCEPTED or 202 CREATED (if a snf-user was just created)
-        {
-            "snf:uuid": ..., "snf:token": ..., "snf:project": ...,
-            "mail": ..., "serverca": ..., "voname": ...,
-            "uri": ..., "server": ..., "version": ...,
-            "user": ..., "userca": ..., "serial": ...,
-            "fqans": [...], "not_after": ..., "not_before": ...
-        }
+def resolve_user(dn, cert, chain):
+    """Use LDAP and Synnefo to resolve a user from a proxy
     """
-    logger.info('POST /authenticate')
-    logger.debug('data: {data}'.format(data=request.data))
-
-    logger.info('Get VOMS credentials')
-    voms_credentials = request.json if request.data else None
-    _check_request_data(voms_credentials)
-
     logger.info('Load settings')
     settings = app.config['ASTAVOMS_SERVER_SETTINGS']
     logger.debug('settings: {settings}'.format(settings=settings))
 
     logger.info('Authenticate VOMS user')
     vomsauth = settings['vomsauth']
-    cert, chain = voms_credentials['cert'], voms_credentials['chain']
     voms_verify = not settings.get('disable_voms_verification')
     try:
         voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
@@ -220,17 +200,14 @@ def authenticate():
             payload=dict(type=e, error='{0}'.format(e)))
     logger.debug('VOMS user: {voms}'.format(voms=voms_user))
 
-    logger.info('Get Synnefo admin client')
-    snf_admin = settings['snf_admin']
-
     logger.info('Check SNF admin credentials')
+    snf_admin = settings['snf_admin']
     try:
         snf_admin.authenticate()
     except SynnefoError as se:
         raise AstavomsSynnefoError(
-            'SNF admin failed to authenticate themselves',
-            error=se)
-    response_code = 201
+            'SNF admin failed to authenticate themselves', error=se)
+    response_data = None
 
     logger.info('Load mappings of VOs to Synnefo Projects')
     with open(settings['vo_projects']) as f:
@@ -240,7 +217,6 @@ def authenticate():
     logger.info('Connect to LDAP directory')
     ldap_args = settings['ldap_args']
     logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
-
     try:
         with LDAPUser(**ldap_args) as ldap_user:
             dn, vo = voms_user['user'], voms_user['voname']
@@ -302,7 +278,7 @@ def authenticate():
                     snf_token = user[2]
                     ldap_user.update_snf_token(snf_uuid, snf_token)
                 try:
-                    snf_admin.authenticate(snf_token)
+                    response_data = snf_admin.authenticate(snf_token)
                 except SynnefoError as se:
                     status = getattr(se, 'status')
                     if status not in (401, ):
@@ -320,6 +296,7 @@ def authenticate():
                         logger.debug('SNF: {error} {status}'.format(
                             error=no_user, status=status))
                         logger.info('SNF: user not found')
+                        raise
 
             if project_id:
                 logger.info('Enroll user to project')
@@ -330,22 +307,85 @@ def authenticate():
     except SynnefoError as se:
         raise AstavomsSynnefoError(error=se)
 
-    response_data = {
-        'snf:uuid': snf_uuid,
-        'snf:token': snf_token,
-        'snf:project': project_id,
-        'mail': email}
+    logger.info('Compile response data')
+    response_data = response_data or snf_admin.authenticate(snf_token)
+    response_data['access']['token']['tennant']['id'] = project_id
+    response_data['access']['token']['tennant']['name'] = vo
     response_data.update(voms_user)
     logger.debug('Response data: {data}'.format(data=response_data))
-    return make_response(jsonify(response_data), response_code)
+    response_data['mail'] = email
+    return response_data
+
+
+@app.route('/authenticate', methods=['POST', ])
+@log_errors
+def authenticate():
+    """POST /authenticate
+        X-Auth-Token: <token for authorized snf-EGI application>
+        {"dn": ..., "cert": ..., "chain": ...}
+
+        Response:
+        201 ACCEPTED or 202 CREATED (if a snf-user was just created)
+        {
+            "snf:uuid": ..., "snf:token": ..., "snf:project": ...,
+            "mail": ..., "serverca": ..., "voname": ...,
+            "uri": ..., "server": ..., "version": ...,
+            "user": ..., "userca": ..., "serial": ...,
+            "fqans": [...], "not_after": ..., "not_before": ...
+        }
+    """
+    logger.info('POST /authenticate')
+    logger.debug('data: {data}'.format(data=request.data))
+
+    logger.info('Get VOMS credentials')
+    voms_credentials = request.json if request.data else None
+    _check_request_data(voms_credentials)
+    r = resolve_user(**voms_credentials)
+
+    snf_user, snf_token = r['access']['user'], r['access']['token']
+    r.update({
+        'snf:uuid': snf_user['id'],
+        'snf:token': snf_token['id'],
+        'snf:project': snf_token['tennant']['id'],
+    })
+    return make_response(jsonify(r), 202)
 
 
 @app.route('/v2.0/tokens', methods=['POST', ])
 @log_errors
 def tokens():
-    response_code = 200
-    response_data = {"tokens": True}
-    return make_response(jsonify(response_data), response_code)
+    """POST /v2.0/tokens
+    Headers:
+        SSL_CLIENT_S_DN: ...
+        SSL_CLIENT_CERT: ...
+        SSL_CLIENT_CERT_CHAIN_*: ...
+    Data:
+        {"auth": {"voms": "true"}}
+
+    Responses:
+        202 ACCEPTED  {...}
+        401 NOT AUTHORISED
+        400 BAD REQUEST
+    """
+    if not request.data:
+        raise AstavomsInputIsMissing()
+
+    data = request.json
+    get_token = "auth" in data and "voms" in data["auth"] and data["auth"]
+    if not get_token:
+        raise AstavomsInvalidInput()
+
+    logger.info("Get client certificate data")
+    try:
+        dn=request.environ.get('HTTP_SSL_CLIENT_S_DN'),
+        cert=request.environ.get('HTTP_SSL_CLIENT_CERT'),
+        chain=[v for k, v in request.environ.iteritems() if k.startswith(
+            'HTTP_SSL_CLIENT_CERT_CHAIN_')]
+    except Exception as e:
+        raise AstavomsInvalidProxy(payload=dict(type=e, error='{0}'.format(e)))
+
+    r = resolve_user(dn, cert, chain)
+    return make_response(jsonify(r), 202)
 
 
 @app.route('/v2.0/tennants', methods=['POST', ])
