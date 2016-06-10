@@ -38,6 +38,7 @@ user = (
     ']'
     '}'
 )
+user_kwargs = json.loads(''.join(user))
 vo_projects = dict(
     vo1='project-id-for-vo1',
     vo2='project-id-for-vo2',
@@ -46,6 +47,86 @@ vo_projects = dict(
 voms_user = dict(user=dn, voname='vo2')
 ldap_user = dict(mail=[email, ], uid=[uuid, ], userPassword=[token, ])
 pool_user = dict(uuid=uuid, token=token, email=email)
+
+
+def iter_deep_equality(this, i1, i2):
+    for i, v in enumerate(i1):
+        if isinstance(v, dict):
+            dict_deep_equality(this, v, i2[i])
+        elif isinstance(v, tuple) or isinstance(v, list):
+            iter_deep_equality(this, v, i2[i])
+        else:
+            this.assertEquals(v, i2[i])
+
+def dict_deep_equality(this, d1, d2):
+    #  Compare top level keys
+    this.assertEquals(d1, d2)
+    for k, v in d1.items():
+        if isinstance(v, dict):
+            dict_deep_equality(this, v, d2[k])
+        elif isinstance(v, tuple) or isinstance(v, list):
+            iter_deep_equality(this, v, d2[k])
+        else:
+            this.assertEquals(v, d2[k])
+
+snf_auth_response = {
+    "access": {
+        "token": {
+            "expires": "2016-06-17T14:23:56.883601+00:00", 
+            "id": "user-token", 
+            "tenant": {
+                "id": "user-id", 
+                "name": "User Name"
+            }
+        }, 
+        "serviceCatalog": [
+            {
+                "endpoints_links": [], 
+                "endpoints": [
+                    {
+                        "SNF:uiURL": "https://accounts.example.org/ui", 
+                        "versionId": "v1.0", 
+                        "region": "default", 
+                        "publicURL": "https://accounts.example.org/account/v1.0"
+                    }
+                ], 
+                "type": "account", 
+                "name": "astakos_account"
+            },
+        ], 
+        "user": {
+            "roles": [
+                {
+                    "name": "default", 
+                    "id": "1"
+                }
+            ], 
+            "roles_links": [], 
+            "id": "user-id", 
+            "projects": [
+                "user-id", 
+                "project-id-for-vo2"
+            ], 
+            "name": "User Name"
+        }
+    }
+}
+
+
+class FlaskTestClientProxy(object):
+    dn = 'SSL CLIENT S DN'
+    cert = 'SSL CLIENT CERT'
+    chain = ['CERT 1', 'CERT 2', 'CERT 3']
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        environ['HTTP_SSL_CLIENT_S_DN'] = self.dn
+        environ['HTTP_SSL_CLIENT_CERT'] = self.cert
+        for i, c in enumerate(self.chain):
+            k = 'HTTP_SSL_CLIENT_CERT_CHAIN_{0}'.format(i)
+            environ['HTTP_SSL_CLIENT_CERT_CHAIN_1'] = c
+        return self.app(environ, start_response)
 
 
 class LDAPUserMock:
@@ -99,27 +180,6 @@ class AuthenticateTest(unittest.TestCase):
             with self.assertRaises(server.AstavomsInvalidInput):
                 server._check_request_data(case)
 
-    def test_dn_to_cn(self):
-        self.assertEquals(server.dn_to_cn('/A=a/B=b/CN=user'), 'user')
-        self.assertEquals(server.dn_to_cn('/b=a/a=b/cn=user/c=C/d=D'), 'user')
-        self.assertEquals(server.dn_to_cn(dn), 'Tyler Durden.12345678')
-
-    def test_phrase_to_str(self):
-        for phrase, expected in (
-                ('simple', 'simple'), ('with space', 'with_space'),
-                (' preceding space', 'preceding_space'),
-                ('trailing space ', 'trailing_space'),
-                ('multiple   spaces', 'multiple___spaces'),
-                ('  This is_a phrase   . ', 'This_is_a_phrase___.')):
-            self.assertEquals(server.phrase_to_str(phrase), expected)
-
-    def test_dn_to_email(self):
-        self.assertEquals(
-            server.dn_to_email(dn), 'Tyler_Durden.12345678@example.org')
-        self.assertEquals(
-            server.dn_to_email('/C=org/O=exam ple/CN=Tyler Durden'),
-            'Tyler_Durden@exam_ple.org')
-
     @mock.patch('astavoms.identity.IdentityClient.create_user')
     @mock.patch('kamaki.clients.Client.__init__')
     def test_create_snf_user(self, client, create_user):
@@ -167,54 +227,17 @@ class AuthenticateTest(unittest.TestCase):
         'astavoms.ldapuser.LDAPUser.__exit__')
     @mock.patch(
         'astavoms.ldapuser.LDAPUser.__enter__', return_value=LDAPUserMock())
-    @mock.patch('astavoms.identity.IdentityClient.authenticate')
+    @mock.patch(
+        'astavoms.identity.IdentityClient.authenticate',
+        return_value=snf_auth_response)
     @mock.patch(
         'astavoms.authvoms.VomsAuth.get_voms_info', return_value=voms_user)
     @mock.patch('astavoms.server.logger.debug')
     @mock.patch('astavoms.server.logger.info')
-    def test_authenticate_new_user(
+    def test_resolve_user(
             self, info, debug, get_voms_info, authenticate,
             ldapuser, ldapuser_exit, userpool, userpool_exit):
-        """When incoming user is not in LDAP"""
-        def search_by_voms(*args, **kwargs):
-            return None
-        LDAPUserMock.search_by_voms = search_by_voms
-
-        def pop(*args, **kwargs):
-            return pool_user
-        UserpoolMock.pop = pop
-
-        r = self.app.post(
-            '/authenticate', data=user, content_type='application/json')
-        ret = json.loads(r.data)
-        exp = {
-            'mail': pool_user['email'],
-            'snf:project': vo_projects['vo2'],
-            'snf:token': pool_user['token'],
-            'snf:uuid': pool_user['uuid'],
-            'user': dn,
-            'voname': 'vo2'
-        }
-        self.assertEquals(set(ret.items()), set(exp.items()))
-        self.assertEquals(r.status_code, 201)
-
-    @mock.patch(
-        'astavoms.userpool.Userpool.__exit__')
-    @mock.patch(
-        'astavoms.userpool.Userpool.__enter__', return_value=UserpoolMock())
-    @mock.patch(
-        'astavoms.ldapuser.LDAPUser.__exit__')
-    @mock.patch(
-        'astavoms.ldapuser.LDAPUser.__enter__', return_value=LDAPUserMock())
-    @mock.patch('astavoms.identity.IdentityClient.authenticate')
-    @mock.patch(
-        'astavoms.authvoms.VomsAuth.get_voms_info', return_value=voms_user)
-    @mock.patch('astavoms.server.logger.debug')
-    @mock.patch('astavoms.server.logger.info')
-    def test_authenticate_existing_user(
-            self, info, debug, get_voms_info, authenticate,
-            ldapuser, ldapuser_exit, userpool, userpool_exit):
-        """When incoming user exists in LDAP"""
+        """Test resolve_user when incoming user exists in LDAP"""
         def search_by_voms(*args, **kwargs):
             return [('ldap uuid', ldap_user)]
         LDAPUserMock.search_by_voms = search_by_voms
@@ -223,20 +246,65 @@ class AuthenticateTest(unittest.TestCase):
             return pool_user
         UserpoolMock.pop = pop
 
-        r = self.app.post(
-            '/authenticate', data=user, content_type='application/json')
-        ret = json.loads(r.data)
-        exp = {
+        ret = server.resolve_user(**user_kwargs)
+        exp = dict(snf_auth_response)
+        exp.update({
             'mail': pool_user['email'],
-            'snf:project': vo_projects['vo2'],
-            'snf:token': pool_user['token'],
-            'snf:uuid': pool_user['uuid'],
             'user': dn,
             'voname': 'vo2'
-        }
-        self.assertEquals(set(ret.items()), set(exp.items()))
-        self.assertEquals(r.status_code, 201)
+        })
+        dict_deep_equality(self, ret, exp)
 
+    @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
+    def test_authenticate(self, resolve_user):
+        """Test /authenticate"""
+        r = self.app.post(
+            '/authenticate', data=user, content_type='application/json')
+        self.assertEquals(r.status_code, 202)
+        data = json.loads(r.data)
+        exp = dict(snf_auth_response)
+        exp.update({
+            'snf:uuid': 'user-id',
+            'snf:token': 'user-token',
+            'snf:project': 'user-id'
+        })
+        dict_deep_equality(self, data, snf_auth_response)
+
+    @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
+    def test_tokens(self, resolve_user):
+        """Test POST /v2.0/tokens"""
+        send_data = '{"auth": {"voms": "true"}}'
+        env_app = FlaskTestClientProxy(self.app)
+        r = env_app.app.post(
+            '/v2.0/tokens', data=send_data, content_type='application/json')
+        self.assertEquals(r.status_code, 202)
+
+        recv_data = json.loads(r.data)
+        exp = dict(snf_auth_response)
+        exp.update(voms_user)
+        exp.update({
+            'snf:uuid': 'user-id',
+            'snf:token': 'user-token',
+            'snf:project': 'user-id',
+            "mail": email,
+        })
+        dict_deep_equality(self, recv_data, exp)
+
+    @mock.patch(
+        'astavoms.identity.IdentityClient.authenticate',
+        return_value=snf_auth_response)
+    def test_tenants(self, snf_admin):
+        """Test POST /v2.0/tenants"""
+        headers = {'X-Auth-Token': token}
+        r = self.app.post('/v2.0/tenants', headers=headers)
+        self.assertEquals(r.status_code, 200)
+
+        snf_admin.assert_called_once_with(token)
+        data = json.loads(r.data)
+        project = dict(
+            id='project-id-for-vo2', name='vo2', description='', enabled=True)
+        exp = dict(tenants=[project, ], tenants_links=[])
+        dict_deep_equality(self, data, exp)
 
 if __name__ == '__main__':
     unittest.main()

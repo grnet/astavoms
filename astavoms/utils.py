@@ -69,6 +69,7 @@ def dn_to_email(dn):
             left_terms.append(v)
         else:
             right_terms.append(v)
+    phrase_to_str = lambda phrase: phrase.strip().replace(' ', '_')
     left = phrase_to_str('.'.join(left_terms))
     right = phrase_to_str('.'.join(reversed(right_terms)))
     return '{left}@{right}'.format(left=left, right=right)

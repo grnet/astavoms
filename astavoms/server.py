@@ -80,6 +80,10 @@ class AstavomsUnauthorizedVOMS(AstavomsRESTError):
     """VOMS Authentication Failed"""
     status_code = 401  # Unauthorized
 
+class AstavomsInvalidToken(AstavomsRESTError):
+    """This token does not match with any Astavoms users"""
+    status_code = 401  # Unauthorized
+
 
 class AstavomsSynnefoError(AstavomsRESTError):
     """Synnefo Error"""
@@ -102,6 +106,7 @@ class AstavomsSynnefoError(AstavomsRESTError):
 @app.errorhandler(AstavomsUnknownVO)
 @app.errorhandler(AstavomsProjectError)
 @app.errorhandler(AstavomsUnauthorizedVOMS)
+@app.errorhandler(AstavomsInvalidToken)
 @app.errorhandler(AstavomsSynnefoError)
 def handle_invalid_usage(error):
     response = jsonify(error.to_dict())
@@ -309,8 +314,8 @@ def resolve_user(dn, cert, chain):
 
     logger.info('Compile response data')
     response_data = response_data or snf_admin.authenticate(snf_token)
-    response_data['access']['token']['tennant']['id'] = project_id
-    response_data['access']['token']['tennant']['name'] = vo
+    response_data['access']['token']['tenant']['id'] = project_id
+    response_data['access']['token']['tenant']['name'] = vo
     response_data.update(voms_user)
     logger.debug('Response data: {data}'.format(data=response_data))
     response_data['mail'] = email
@@ -340,13 +345,14 @@ def authenticate():
     logger.info('Get VOMS credentials')
     voms_credentials = request.json if request.data else None
     _check_request_data(voms_credentials)
+
     r = resolve_user(**voms_credentials)
 
     snf_user, snf_token = r['access']['user'], r['access']['token']
     r.update({
         'snf:uuid': snf_user['id'],
         'snf:token': snf_token['id'],
-        'snf:project': snf_token['tennant']['id'],
+        'snf:project': snf_token['tenant']['id'],
     })
     return make_response(jsonify(r), 202)
 
@@ -355,7 +361,7 @@ def authenticate():
 @log_errors
 def tokens():
     """POST /v2.0/tokens
-    Headers:
+    Environ:
         SSL_CLIENT_S_DN: ...
         SSL_CLIENT_CERT: ...
         SSL_CLIENT_CERT_CHAIN_*: ...
@@ -363,7 +369,7 @@ def tokens():
         {"auth": {"voms": "true"}}
 
     Responses:
-        202 ACCEPTED  {...}
+        202 ACCEPTED  {astakos response + voms information}
         401 NOT AUTHORISED
         400 BAD REQUEST
     """
@@ -371,8 +377,7 @@ def tokens():
         raise AstavomsInputIsMissing()
 
     data = request.json
-    get_token = "auth" in data and "voms" in data["auth"] and data["auth"]
-    if not get_token:
+    if not all([data, "auth" in data, "voms" in data["auth"], data["auth"]]):
         raise AstavomsInvalidInput()
 
     logger.info("Get client certificate data")
@@ -388,11 +393,63 @@ def tokens():
     return make_response(jsonify(r), 202)
 
 
-@app.route('/v2.0/tennants', methods=['POST', ])
+@app.route('/v2.0/tenants', methods=['POST', ])
 @log_errors
-def tennants():
+def tenants():
+    """POST /v2.0/tenants
+    Headers:
+        X-Auth-Token: ...
+
+    Responses:
+        200 OK {
+            "tenants": [{
+                "id": ...,
+                "name": ...,
+                "description": ...,
+                "enabled": true},
+                ...],
+            "tenants_links": []
+            }
+        400 BAD REQUEST
+        401 NOT AUTHORISED
+        404 NOT FOUND (Token not found)
+    """
+    token = request.headers.get('X-Auth-Token')
+    if not token:
+        raise AstavomsInvalidInput('X-Auth-token header required')
+    logger.debug('X-Auth-Token: {token}'.format(token=token))
+
+    data = request.json
+    logger.debug('data: {0}'.format(data))
+    if not all([
+            data, 'auth' in data,
+            'voms' in data['auth'], data['auth'],
+            'tenantName' in data['auth']]):
+        raise AstavomsInvalidInput()
+
+    logger.info('Load settings')
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
+    logger.debug('settings: {settings}'.format(settings=settings))
+
+    logger.info('Authenticate this token and get user information')
+    snf_admin = settings['snf_admin']
+    snf_user = snf_admin.authenticate(token)
+    logger.debug('SNF user: {user}'.format(user=snf_user))
+    user_projects = snf_user['access']['user']['projects']
+
+    logger.info('Load mappings of VOs to Synnefo Projects')
+    with open(settings['vo_projects']) as f:
+        vo_projects = json.load(f)
+    logger.debug('VO-projects: {vo_projects}'.format(vo_projects=vo_projects))
+
+    tenants = []
+    for name, project_id in vo_projects.items():
+        if project_id in user_projects:
+            tenants.append(dict(
+                id=project_id, name=name, enabled=True, description=''))
+
     response_code = 200
-    response_data = {"tennants": True}
+    response_data = dict(tenants=tenants, tenants_links=[])
     return make_response(jsonify(response_data), response_code)
 
 
