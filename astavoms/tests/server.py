@@ -268,7 +268,8 @@ class AuthenticateTest(unittest.TestCase):
             'snf:token': 'user-token',
             'snf:project': 'user-id'
         })
-        dict_deep_equality(self, data, snf_auth_response)
+        # dict_deep_equality(self, data, snf_auth_response)
+        dict_deep_equality(self, data, exp)
 
     @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
     def test_tokens(self, resolve_user):
@@ -296,7 +297,10 @@ class AuthenticateTest(unittest.TestCase):
     def test_tenants(self, snf_admin):
         """Test POST /v2.0/tenants"""
         headers = {'X-Auth-Token': token}
-        r = self.app.post('/v2.0/tenants', headers=headers)
+        send_data = '{"auth": {"voms": "true", "tenantName": "DoesntMatter"}}'
+        r = self.app.post(
+            '/v2.0/tenants',
+            headers=headers, content_type='application/json', data=send_data)
         self.assertEquals(r.status_code, 200)
 
         snf_admin.assert_called_once_with(token)

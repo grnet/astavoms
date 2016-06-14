@@ -105,6 +105,7 @@ class AstavomsSynnefoError(AstavomsRESTError):
 @app.errorhandler(AstavomsInvalidInput)
 @app.errorhandler(AstavomsUnknownVO)
 @app.errorhandler(AstavomsProjectError)
+@app.errorhandler(AstavomsInvalidProxy)
 @app.errorhandler(AstavomsUnauthorizedVOMS)
 @app.errorhandler(AstavomsInvalidToken)
 @app.errorhandler(AstavomsSynnefoError)
@@ -373,19 +374,24 @@ def tokens():
         401 NOT AUTHORISED
         400 BAD REQUEST
     """
+    logger.info('POST /v2.0/tokens')
     if not request.data:
         raise AstavomsInputIsMissing()
 
     data = request.json
+    logger.debug('data: {0}'.format(data))
     if not all([data, "auth" in data, "voms" in data["auth"], data["auth"]]):
         raise AstavomsInvalidInput()
 
     logger.info("Get client certificate data")
     try:
-        dn=request.environ.get('HTTP_SSL_CLIENT_S_DN'),
-        cert=request.environ.get('HTTP_SSL_CLIENT_CERT'),
+        dn=request.environ.get('HTTP_SSL_CLIENT_S_DN')
+        logger.debug("... dn: {0}".format(dn))
+        cert=request.environ.get('HTTP_SSL_CLIENT_CERT')
+        logger.debug("... cert: {0}".format(cert))
         chain=[v for k, v in request.environ.iteritems() if k.startswith(
             'HTTP_SSL_CLIENT_CERT_CHAIN_')]
+        logger.debug("... chain: {0}".format(chain))
     except Exception as e:
         raise AstavomsInvalidProxy(payload=dict(type=e, error='{0}'.format(e)))
 
@@ -414,6 +420,18 @@ def tenants():
         401 NOT AUTHORISED
         404 NOT FOUND (Token not found)
     """
+    logger.info('POST /v2.0/tenants')
+    if not request.data:
+        raise AstavomsInputIsMissing()
+
+    data = request.json
+    logger.debug('data: {0}'.format(data))
+    if not all([
+            data, 'auth' in data,
+            'voms' in data['auth'], data['auth'],
+            'tenantName' in data['auth']]):
+        raise AstavomsInvalidInput()
+
     token = request.headers.get('X-Auth-Token')
     if not token:
         raise AstavomsInvalidInput('X-Auth-token header required')
@@ -444,6 +462,7 @@ def tenants():
 
     tenants = []
     for name, project_id in vo_projects.items():
+        #  ?Check if name == data['tenantName']
         if project_id in user_projects:
             tenants.append(dict(
                 id=project_id, name=name, enabled=True, description=''))
