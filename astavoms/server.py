@@ -358,6 +358,20 @@ def authenticate():
     return make_response(jsonify(r), 202)
 
 
+def get_voms_proxy(environ):
+    """Extract VOMS proxy from the WSGI environment
+    :returns: SSL_CLIENT_S_DN, SSL_CLIENT_CERT, [SSL_CLIENT_CERT_CHAIN_0, ...]
+    """
+    dn=request.environ.get('HTTP_SSL_CLIENT_S_DN')
+    logger.debug("... dn: {0}".format(dn))
+    cert=request.environ.get('HTTP_SSL_CLIENT_CERT')
+    logger.debug("... cert: {0}".format(cert))
+    chain=[v for k, v in request.environ.iteritems() if k.startswith(
+        'HTTP_SSL_CLIENT_CERT_CHAIN_')]
+    logger.debug("... chain: {0}".format(chain))
+    return dn, cert, chain
+
+
 @app.route('/v2.0/tokens', methods=['POST', ])
 @log_errors
 def tokens():
@@ -378,6 +392,8 @@ def tokens():
     if not request.data:
         raise AstavomsInputIsMissing()
 
+    logger.debug('Headers: {0}'.format(request.headers))
+
     data = request.json
     logger.debug('data: {0}'.format(data))
     if not all([data, "auth" in data, "voms" in data["auth"], data["auth"]]):
@@ -385,13 +401,7 @@ def tokens():
 
     logger.info("Get client certificate data")
     try:
-        dn=request.environ.get('HTTP_SSL_CLIENT_S_DN')
-        logger.debug("... dn: {0}".format(dn))
-        cert=request.environ.get('HTTP_SSL_CLIENT_CERT')
-        logger.debug("... cert: {0}".format(cert))
-        chain=[v for k, v in request.environ.iteritems() if k.startswith(
-            'HTTP_SSL_CLIENT_CERT_CHAIN_')]
-        logger.debug("... chain: {0}".format(chain))
+        dn, cert, chain = get_voms_proxy(request.environ)
     except Exception as e:
         raise AstavomsInvalidProxy(payload=dict(type=e, error='{0}'.format(e)))
 
@@ -432,26 +442,24 @@ def tenants():
             'tenantName' in data['auth']]):
         raise AstavomsInvalidInput()
 
-    token = request.headers.get('X-Auth-Token')
-    if not token:
-        raise AstavomsInvalidInput('X-Auth-token header required')
-    logger.debug('X-Auth-Token: {token}'.format(token=token))
-
-    data = request.json
-    logger.debug('data: {0}'.format(data))
-    if not all([
-            data, 'auth' in data,
-            'voms' in data['auth'], data['auth'],
-            'tenantName' in data['auth']]):
-        raise AstavomsInvalidInput()
-
     logger.info('Load settings')
     settings = app.config['ASTAVOMS_SERVER_SETTINGS']
     logger.debug('settings: {settings}'.format(settings=settings))
 
-    logger.info('Authenticate this token and get user information')
-    snf_admin = settings['snf_admin']
-    snf_user = snf_admin.authenticate(token)
+    logger.info('Get token from X-Auth-Token header')
+    token = request.headers.get('X-Auth-Token')
+    if token:
+        logger.info('Authenticate token and get user information')
+        snf_admin = settings['snf_admin']
+        snf_user = snf_admin.authenticate(token)
+    else:
+        logger.info('No X-Auth-Token header, resolve from client proxy')
+        try:
+            dn, cert, chain = get_voms_proxy(request.environ)
+        except Exception as e:
+            raise AstavomsInvalidInput(
+                'X-Auth-token header or client proxy required')
+        snf_user = resolve_user(dn, cert, chain)
     logger.debug('SNF user: {user}'.format(user=snf_user))
     user_projects = snf_user['access']['user']['projects']
 
@@ -464,6 +472,7 @@ def tenants():
     for name, project_id in vo_projects.items():
         #  ?Check if name == data['tenantName']
         if project_id in user_projects:
+            #  TODO: resolve description
             tenants.append(dict(
                 id=project_id, name=name, enabled=True, description=''))
 
