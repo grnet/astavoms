@@ -62,9 +62,11 @@ class AstavomsInvalidInput(AstavomsRESTError):
     """Input is missing some elements"""
     status_code = 400  # Bad request
 
+
 class AstavomsInvalidProxy(AstavomsRESTError):
     """Client proxy certificates are not well formated or missing"""
     status_code = 400  # Bad request
+
 
 class AstavomsUnknownVO(AstavomsRESTError):
     """Virtual Organization not in dictionary"""
@@ -79,6 +81,7 @@ class AstavomsProjectError(AstavomsRESTError):
 class AstavomsUnauthorizedVOMS(AstavomsRESTError):
     """VOMS Authentication Failed"""
     status_code = 401  # Unauthorized
+
 
 class AstavomsInvalidToken(AstavomsRESTError):
     """This token does not match with any Astavoms users"""
@@ -189,6 +192,7 @@ def enroll_to_project(snf_admin, email, project):
             raise
         logger.debug('User is already enrolled')
 
+
 def resolve_user(dn, cert, chain):
     """Use LDAP and Synnefo to resolve a user from a proxy
     """
@@ -265,7 +269,6 @@ def resolve_user(dn, cert, chain):
                         logger.info('SNF user not found')
                         snf_user = create_snf_user(
                             snf_admin, pool_args, dn, vo, email, project_id)
-                        response_code = 202
                     snf_uuid = snf_user['id']
                     snf_token = snf_user['auth_token']
                 logger.info('Store user in LDAP')
@@ -362,11 +365,11 @@ def get_voms_proxy(environ):
     """Extract VOMS proxy from the WSGI environment
     :returns: SSL_CLIENT_S_DN, SSL_CLIENT_CERT, [SSL_CLIENT_CERT_CHAIN_0, ...]
     """
-    dn=request.environ.get('HTTP_SSL_CLIENT_S_DN')
+    dn = request.environ.get('HTTP_SSL_CLIENT_S_DN')
     logger.debug("... dn: {0}".format(dn))
-    cert=request.environ.get('HTTP_SSL_CLIENT_CERT')
+    cert = request.environ.get('HTTP_SSL_CLIENT_CERT')
     logger.debug("... cert: {0}".format(cert))
-    chain=[v for k, v in request.environ.iteritems() if k.startswith(
+    chain = [v for k, v in request.environ.iteritems() if k.startswith(
         'HTTP_SSL_CLIENT_CERT_CHAIN_')]
     logger.debug("... chain: {0}".format(chain))
     return dn, cert, chain
@@ -456,7 +459,7 @@ def tenants():
         logger.info('No X-Auth-Token header, resolve from client proxy')
         try:
             dn, cert, chain = get_voms_proxy(request.environ)
-        except Exception as e:
+        except Exception:
             raise AstavomsInvalidInput(
                 'X-Auth-token header or client proxy required')
         snf_user = resolve_user(dn, cert, chain)
