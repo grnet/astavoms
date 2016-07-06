@@ -39,6 +39,7 @@ user = (
     '}'
 )
 user_kwargs = json.loads(''.join(user))
+cert, chain = user_kwargs['cert'], user_kwargs['chain']
 vo_projects = dict(
     vo1='project-id-for-vo1',
     vo2='project-id-for-vo2',
@@ -58,6 +59,7 @@ def iter_deep_equality(this, i1, i2):
         else:
             this.assertEquals(v, i2[i])
 
+
 def dict_deep_equality(this, d1, d2):
     #  Compare top level keys
     this.assertEquals(d1, d2)
@@ -72,41 +74,41 @@ def dict_deep_equality(this, d1, d2):
 snf_auth_response = {
     "access": {
         "token": {
-            "expires": "2016-06-17T14:23:56.883601+00:00", 
-            "id": "user-token", 
+            "expires": "2016-06-17T14:23:56.883601+00:00",
+            "id": "user-token",
             "tenant": {
-                "id": "user-id", 
+                "id": "user-id",
                 "name": "User Name"
             }
-        }, 
+        },
         "serviceCatalog": [
             {
-                "endpoints_links": [], 
+                "endpoints_links": [],
                 "endpoints": [
                     {
-                        "SNF:uiURL": "https://accounts.example.org/ui", 
-                        "versionId": "v1.0", 
-                        "region": "default", 
+                        "SNF:uiURL": "https://accounts.example.org/ui",
+                        "versionId": "v1.0",
+                        "region": "default",
                         "publicURL": "https://accounts.example.org/account/v1.0"
                     }
-                ], 
-                "type": "account", 
+                ],
+                "type": "account",
                 "name": "astakos_account"
             },
-        ], 
+        ],
         "user": {
             "roles": [
                 {
-                    "name": "default", 
+                    "name": "default",
                     "id": "1"
                 }
-            ], 
-            "roles_links": [], 
-            "id": "user-id", 
+            ],
+            "roles_links": [],
+            "id": "user-id",
             "projects": [
-                "user-id", 
+                "user-id",
                 "project-id-for-vo2"
-            ], 
+            ],
             "name": "User Name"
         }
     }
@@ -114,9 +116,10 @@ snf_auth_response = {
 
 
 class FlaskTestClientProxy(object):
-    dn = 'SSL CLIENT S DN'
-    cert = 'SSL CLIENT CERT'
-    chain = ['CERT 1', 'CERT 2', 'CERT 3']
+    dn = dn
+    cert = user_kwargs['cert']
+    chain = user_kwargs['chain']
+
     def __init__(self, app):
         self.app = app
 
@@ -125,7 +128,7 @@ class FlaskTestClientProxy(object):
         environ['HTTP_SSL_CLIENT_CERT'] = self.cert
         for i, c in enumerate(self.chain):
             k = 'HTTP_SSL_CLIENT_CERT_CHAIN_{0}'.format(i)
-            environ['HTTP_SSL_CLIENT_CERT_CHAIN_1'] = c
+            environ[k] = c
         return self.app(environ, start_response)
 
 
@@ -272,7 +275,9 @@ class AuthenticateTest(unittest.TestCase):
         dict_deep_equality(self, data, exp)
 
     @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
-    def test_tokens(self, resolve_user):
+    @mock.patch(
+        'astavoms.server.get_voms_proxy', return_value=(dn, cert, chain))
+    def test_tokens(self, get_voms_proxy, resolve_user):
         """Test POST /v2.0/tokens"""
         send_data = '{"auth": {"voms": "true"}}'
         env_app = FlaskTestClientProxy(self.app)
@@ -295,12 +300,9 @@ class AuthenticateTest(unittest.TestCase):
         'astavoms.identity.IdentityClient.authenticate',
         return_value=snf_auth_response)
     def test_tenants(self, snf_admin):
-        """Test POST /v2.0/tenants"""
+        """Test GET /v2.0/tenants"""
         headers = {'X-Auth-Token': token}
-        send_data = '{"auth": {"voms": "true", "tenantName": "DoesntMatter"}}'
-        r = self.app.post(
-            '/v2.0/tenants',
-            headers=headers, content_type='application/json', data=send_data)
+        r = self.app.get('/v2.0/tenants', headers=headers)
         self.assertEquals(r.status_code, 200)
 
         snf_admin.assert_called_once_with(token)
@@ -309,6 +311,21 @@ class AuthenticateTest(unittest.TestCase):
             id='project-id-for-vo2', name='vo2', description='', enabled=True)
         exp = dict(tenants=[project, ], tenants_links=[])
         dict_deep_equality(self, data, exp)
+
+    def test_get_voms_info(self):
+        """Test the method that extracts SSL_CLIENT_* proxy certs from
+            an environ dict
+        """
+        environ = dict(
+            somekey='ignorethis', otherkey='ignorethistoo',
+            HTTP_SSL_CLIENT_S_DN=dn, HTTP_SSL_CLIENT_CERT=cert,
+        )
+        for i, v in enumerate(chain):
+            environ['HTTP_SSL_CLIENT_CERT_CHAIN_{0}'.format(i)] = v
+        r = server.get_voms_proxy(environ)
+        self.assertEquals(r[0], dn)
+        self.assertEquals(r[1], cert)
+        self.assertEquals(r[2], chain)
 
 if __name__ == '__main__':
     unittest.main()

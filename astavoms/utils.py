@@ -73,3 +73,10 @@ def dn_to_email(dn):
     left = phrase_to_str('.'.join(left_terms))
     right = phrase_to_str('.'.join(reversed(right_terms)))
     return '{left}@{right}'.format(left=left, right=right)
+
+
+def normalize_cert(cert):
+    """:return: cert with \n instead of empty spaces, when lines end"""
+    return cert.replace(' ', '\n').replace(
+        '-----BEGIN\nCERTIFICATE-----', '-----BEGIN CERTIFICATE-----').replace(
+            '-----END\nCERTIFICATE-----', '-----END CERTIFICATE-----')

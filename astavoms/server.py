@@ -363,14 +363,26 @@ def authenticate():
 
 def get_voms_proxy(environ):
     """Extract VOMS proxy from the WSGI environment
+    This method is in server.py for logging purposes
     :returns: SSL_CLIENT_S_DN, SSL_CLIENT_CERT, [SSL_CLIENT_CERT_CHAIN_0, ...]
     """
-    dn = request.environ.get('HTTP_SSL_CLIENT_S_DN')
+    dn = environ.get('HTTP_SSL_CLIENT_S_DN')
     logger.debug("... dn: {0}".format(dn))
-    cert = request.environ.get('HTTP_SSL_CLIENT_CERT')
+    cert = utils.normalize_cert(environ.get('HTTP_SSL_CLIENT_CERT'))
     logger.debug("... cert: {0}".format(cert))
-    chain = [v for k, v in request.environ.iteritems() if k.startswith(
-        'HTTP_SSL_CLIENT_CERT_CHAIN_')]
+
+    chain, prefix = list(), 'HTTP_SSL_CLIENT_CERT_CHAIN_'
+    while True:
+        i = len(chain)
+        key = '{0}{1}'.format(prefix, i)
+        try:
+            ring = environ.get(key)
+        except KeyError:
+            break
+        if not ring or 'null' in ring:
+            break
+        chain.append(utils.normalize_cert(ring))
+
     logger.debug("... chain: {0}".format(chain))
     return dn, cert, chain
 
@@ -380,11 +392,11 @@ def get_voms_proxy(environ):
 def tokens():
     """POST /v2.0/tokens
     Environ:
-        SSL_CLIENT_S_DN: ...
-        SSL_CLIENT_CERT: ...
-        SSL_CLIENT_CERT_CHAIN_*: ...
+        HTTP_SSL_CLIENT_S_DN: ...
+        HTTP_SSL_CLIENT_CERT: ...
+        HTTP_SSL_CLIENT_CERT_CHAIN_*: ...
     Data:
-        {"auth": {"voms": "true"}}
+        {"auth": {"voms": true}}
 
     Responses:
         202 ACCEPTED  {astakos response + voms information}
@@ -412,10 +424,10 @@ def tokens():
     return make_response(jsonify(r), 202)
 
 
-@app.route('/v2.0/tenants', methods=['POST', ])
+@app.route('/v2.0/tenants', methods=['GET', ])
 @log_errors
 def tenants():
-    """POST /v2.0/tenants
+    """GET /v2.0/tenants
     Headers:
         X-Auth-Token: ...
 
@@ -433,17 +445,7 @@ def tenants():
         401 NOT AUTHORISED
         404 NOT FOUND (Token not found)
     """
-    logger.info('POST /v2.0/tenants')
-    if not request.data:
-        raise AstavomsInputIsMissing()
-
-    data = request.json
-    logger.debug('data: {0}'.format(data))
-    if not all([
-            data, 'auth' in data,
-            'voms' in data['auth'], data['auth'],
-            'tenantName' in data['auth']]):
-        raise AstavomsInvalidInput()
+    logger.info('GET /v2.0/tenants')
 
     logger.info('Load settings')
     settings = app.config['ASTAVOMS_SERVER_SETTINGS']

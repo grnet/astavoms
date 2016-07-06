@@ -43,6 +43,12 @@ class UtilsTest(unittest.TestCase):
             utils.dn_to_email('/C=org/O=exam ple/CN=Tyler Durden'),
             'Tyler_Durden@exam_ple.org')
 
+    def test_normalize_cert(self):
+        begin, end = '-----BEGIN CERTIFICATE-----', '-----END CERTIFICATE-----'
+        cert = '{0} stu77 57uff {1}'.format(begin, end)
+        exp = '{0}\nstu77\n57uff\n{1}'.format(begin, end)
+        self.assertEquals(utils.normalize_cert(cert), exp)
+
 
 if __name__ == '__main__':
     unittest.main()
