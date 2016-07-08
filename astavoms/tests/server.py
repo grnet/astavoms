@@ -62,7 +62,6 @@ def iter_deep_equality(this, i1, i2):
 
 def dict_deep_equality(this, d1, d2):
     #  Compare top level keys
-    this.assertEquals(d1, d2)
     for k, v in d1.items():
         if isinstance(v, dict):
             dict_deep_equality(this, v, d2[k])
@@ -170,19 +169,6 @@ class AuthenticateTest(unittest.TestCase):
     def tearDown(self):
         self.vo_projects_file.close()
 
-    def test__check_request_data(self):
-        valid = dict(dn='some dn', cert='some cert', chain=['c1', 'c2', 'c3'])
-        self.assertEquals(server._check_request_data(valid), None)
-
-        invalids = [
-            dict(dn='some dn', chain=['c1', 'c2', 'c3']),
-            dict(dn='a dn', cert='some cert', chain=['c2', 'c3'], a=1, b=2),
-            dict(cert='some cert', chain='c2, c3'),
-        ]
-        for case in invalids:
-            with self.assertRaises(server.AstavomsInvalidInput):
-                server._check_request_data(case)
-
     @mock.patch('astavoms.identity.IdentityClient.create_user')
     @mock.patch('kamaki.clients.Client.__init__')
     def test_create_snf_user(self, client, create_user):
@@ -215,12 +201,6 @@ class AuthenticateTest(unittest.TestCase):
         with mock.patch(method, side_effect=ClientError('err', 404)):
             with self.assertRaises(ClientError):
                 server.enroll_to_project(snf_admin, email, project)
-
-    def test_bad_request(self):
-        for kw in (dict(data=user), dict()):
-            r = self.app.post('/authenticate', **kw)
-            assert server.AstavomsInputIsMissing.status_code == r.status_code
-            assert server.AstavomsInputIsMissing.__doc__ in r.data
 
     @mock.patch(
         'astavoms.userpool.Userpool.__exit__')
@@ -257,22 +237,6 @@ class AuthenticateTest(unittest.TestCase):
             'voname': 'vo2'
         })
         dict_deep_equality(self, ret, exp)
-
-    @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
-    def test_authenticate(self, resolve_user):
-        """Test /authenticate"""
-        r = self.app.post(
-            '/authenticate', data=user, content_type='application/json')
-        self.assertEquals(r.status_code, 202)
-        data = json.loads(r.data)
-        exp = dict(snf_auth_response)
-        exp.update({
-            'snf:uuid': 'user-id',
-            'snf:token': 'user-token',
-            'snf:project': 'user-id'
-        })
-        # dict_deep_equality(self, data, snf_auth_response)
-        dict_deep_equality(self, data, exp)
 
     @mock.patch('astavoms.server.resolve_user', return_value=snf_auth_response)
     @mock.patch(

@@ -135,28 +135,6 @@ def log_errors(func):
     return wrap
 
 
-def _check_request_data(voms_credentials):
-    """Check voms_to_snf request data and raise appropriate errors
-    :param voms_credentials: (dict) {"dn": ..., "cert": ..., "chain": ...}
-    :raises AstavomsInputIsMissing: if no voms_credentials
-    :raises astavomsInvalidInput: if voms_credentials is invalid
-    """
-    if not voms_credentials:
-        raise AstavomsInputIsMissing()
-    expected_keys = ('dn', 'cert', 'chain')
-    missing = set(expected_keys) - set(voms_credentials)
-    unexpected = set(voms_credentials) - set(expected_keys)
-    err_msg, payload = 'Input ', dict()
-    if missing:
-        err_msg += "is missing keys"
-        payload['missing'] = tuple(missing)
-    if unexpected:
-        err_msg += (' and ' if missing else '') + 'contains unexpected keys'
-        payload['unexpected'] = tuple(unexpected)
-    if missing or unexpected:
-        raise AstavomsInvalidInput(err_msg, payload=payload)
-
-
 def create_snf_user(snf_admin, dn, vo, email, project=None):
     """
     :param snf_admin: (IdentityClient)
@@ -324,41 +302,6 @@ def resolve_user(dn, cert, chain):
     logger.debug('Response data: {data}'.format(data=response_data))
     response_data['mail'] = email
     return response_data
-
-
-@app.route('/authenticate', methods=['POST', ])
-@log_errors
-def authenticate():
-    """POST /authenticate
-        X-Auth-Token: <token for authorized snf-EGI application>
-        {"dn": ..., "cert": ..., "chain": ...}
-
-        Response:
-        201 ACCEPTED or 202 CREATED (if a snf-user was just created)
-        {
-            "snf:uuid": ..., "snf:token": ..., "snf:project": ...,
-            "mail": ..., "serverca": ..., "voname": ...,
-            "uri": ..., "server": ..., "version": ...,
-            "user": ..., "userca": ..., "serial": ...,
-            "fqans": [...], "not_after": ..., "not_before": ...
-        }
-    """
-    logger.info('POST /authenticate')
-    logger.debug('data: {data}'.format(data=request.data))
-
-    logger.info('Get VOMS credentials')
-    voms_credentials = request.json if request.data else None
-    _check_request_data(voms_credentials)
-
-    r = resolve_user(**voms_credentials)
-
-    snf_user, snf_token = r['access']['user'], r['access']['token']
-    r.update({
-        'snf:uuid': snf_user['id'],
-        'snf:token': snf_token['id'],
-        'snf:project': snf_token['tenant']['id'],
-    })
-    return make_response(jsonify(r), 202)
 
 
 def get_voms_proxy(environ):
