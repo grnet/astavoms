@@ -87,54 +87,102 @@ Synnefo/EGI applications.
 
 .. rubric:: VO user to Synnefo user
 
-========================== ====== =================
+========================== ====== ================
 Description                Method Endpoint
-========================== ====== =================
-`Get Synnefo credentials`_ POST   ``/authenticate``
-========================== ====== =================
+========================== ====== ================
+`Get Synnefo credentials`_ POST   ``/v2.0/tokens``
+========================== ====== ================
+
+=============== ================
+Request Headers Required
+=============== ================
+Content-Type    yes
+Content-Length  yes
+X-Auth-Token    optional
+=============== ================
 
 |
-==============  ================
-Request Header  Value
-==============  ================
-Content-type    application/json
-==============  ================
+========================  ================
+Request proxy (optional) Value
+========================  ================
+SSL_CLIENT_S_DN          <User DN>,
+SSL_CLIENT_CERT          <User PEM certificate>,
+SSL_CLIENT_CERT_CHAIN_*  <PEM chain>
+======================== ================
 
-|
-==============  ================
-Request Data    Value
-==============  ================
-Content-type    application/json
-==============  ================
+.. note:: If an X-Auth-Token is provided, there is no need for a client proxy
 
-Request data::
 
-    {
-        "dn": <User DN>,
-	"cert": <User PEM certificate>,
-	"chain": <PEM chain>
-    }
+Request Data:
+
+    {"auth": {"voms": true}}
 
 
 Response data::
 
     {
-        "snf:uuid": <Synnefo user UUID>,
-        "snf:token": <Synnefo user token>,
-        "snf:project": <Synnefo Project ID>,
-        "mail": <user e-mail>,
-        "serverca": <VOMS server CA>,
-        "voname": <VO name>,
-        "uri": <VO URI>,
-        "server": <VO server>,
-        "version": <OCCI version>,
-        "user": <User description>,
-        "userca": <User CA>,
-        "serial": <User serial>,
-        "fqans": [...],
-        "not_after": <Date (see OCCI)>,
-        "not_before": <Date (see OCCI)>
+      "access": {
+        "serviceCatalog": [
+          {
+            "endpoints": [...]
+          },
+        ],
+        "token": {
+          "expires": "2016-07-21T09:38:00.585971+00:00",
+          "id": "User-Token",
+          "tenant": {
+            "id": "VO-related-project-id",
+            "name": "VO.name"
+          }
+        },
+        "user": {
+          "id": "User-UUID",
+          "name": "user@email.in.synnefo",
+          "projects": [
+            "User-System-Project-Id",
+            "VO-related-project-id"
+          ],
+          "roles": [
+            {
+              "id": "13",
+              "name": "VO-role"
+            }
+          ],
+          "roles_links": []
+        }
+      },
+      "fqans": [
+        "/VO.name/Role=NULL/Capability=NULL"
+      ],
+      "mail": "user@email.in.synnefo",
+      "not_after": "20160708200318Z",
+      "not_before": "20160708080318Z",
+      "serial": "someserial",
+      "server": "/DC=org/DC=example/C=CNTR/CN=voms1.grid.example.com",
+      "serverca": "/Server/CA",
+      "uri": "voms1.grid.example.com:65432",
+      "user": "/C=COM/O=Example/CN=User Name",
+      "userca": "/C=COM/O=Example/OU=Certification Authorities/CN=Authority CN",
+      "version": 1,
+      "voname": "VO.name"
     }
 
 .. note:: All response data is produced by VOMS authentication, except from
 	Synnefo-related information, which is prefixed with 'snf:'
+
+========================== ====== ================
+Description                Method Endpoint
+========================== ====== ================
+`Get Tenant/Project id`_   GET    ``/v2.0/tenants``
+========================== ====== ================
+
+|
+==============  ================
+Request Header  Value
+==============  ================
+X-Auth-Token    user token
+==============  ================
+
+Response data:
+
+    same as in /v2.0/tokens

@@ -24,3 +24,11 @@ Renew Synnefo user tokens
 Augment response with Synnefo credentials (uuid, token,
 project id)
 Provide a deployment guide w.r.t. scalability and security
+
+v0.4
+====
+Introduce two openstack-keystone endpoints, /v2.0/tokens and /v2.0/tenants
+Implement POST /v2.0/tokens and GET /v2.0/tenants
+Merge Synnefo and EGI information in authentication responses
+Remove /authenticate endpoint and corresponding functionality
+Minor bugfixes

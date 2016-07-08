@@ -43,11 +43,11 @@ The proxy server is given VOMS user information and returns Synnefo/Astakos
 credentials, e.g.:
 
 ```
-> POST https://astavoms.host:5000/authenticate
->   X-Auth-Token: Trusted-client-token
+> GET https://astavoms.host:5000/v2.0/tokens
+>   X-Auth-Token: User-Token
 >   Content-Type: application/json
 >
-> {"dn": ..., "cert": ..., "chain": ...}
+> {"auth": {"voms": true}}
 
 < 202 ACCEPTED
 < 
@@ -60,6 +60,10 @@ credentials, e.g.:
 < }
 ```
 
+Instead of a token, header, you can use a client proxy instead.
+
+The /v2.0/tenants endpoint is also implemented.
+
 Tools
 -----
 
@@ -71,8 +75,6 @@ An LDAP driver for accessing and updating an LDAP directory (astavoms.ldapuser)
 A kamaki extension for dealing with an astavoms service (astavomaki)
 
 A CLI tool (astavoms-pool) for managing the user pool
-
-TODO: a tool for (manually) updating VOs and, maybe, VO users
 
 ## Copyright and license
 

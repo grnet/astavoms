@@ -26,7 +26,7 @@ setup(
     long_description=open('README.md').read(),
     url='',
     download_url='',
-    license='BSD',
+    license='GPLv3',
     author='Stavros Sachtouris',
     author_email='saxtouri@admin.grnet.gr',
     maintainer='Stavros Sachtouris',
@@ -34,16 +34,14 @@ setup(
     packages=['astavoms', 'astavoms.authvoms'],
     classifiers=[
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Intended Audience :: Developers',
         'Intended Audience :: System Administrators',
         'Environment :: Console',
-        'License :: OSI Approved :: BSD License',
+        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Natural Language :: English',
-        'Topic :: System :: Shells',
+        'Topic :: Internet :: WWW/HTTP :: WSGI :: Application',
         'Topic :: Software Development :: Libraries :: Python Modules',
-        'Topic :: Utilities'
         ],
     include_package_data=True,
     entry_points={
