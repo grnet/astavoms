@@ -22,7 +22,7 @@ from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
 from astavoms.userpool import Userpool, UserpoolError
 from kamaki.clients import ClientError as SynnefoError
-from astavoms import utils
+from astavoms import utils, errors
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -30,88 +30,14 @@ logger = logging.getLogger(__name__)
 ASTAVOMS_SERVER_SETTINGS = dict()
 
 
-class AstavomsRESTError(Exception):
-    """Template class for Astavoms errors"""
-    status_code = None  # Must be set
-
-    def __init__(self, message=None, status_code=None, payload=None):
-        """ Add some context to the error
-            :param message: a user friendly message
-            :param status_code: REST status code
-            :param payload: (dict) some context for the error
-        """
-        Exception.__init__(self)
-        self.message = message or self.__doc__
-        if status_code is not None:
-            self.status_code = status_code
-        self.payload = payload
-
-    def to_dict(self):
-        """Return errors in JSON instead of the default HTML format"""
-        rv = dict(self.payload or ())
-        rv['message'] = self.message
-        return rv
-
-
-class AstavomsInputIsMissing(AstavomsRESTError):
-    """Request is missing data input"""
-    status_code = 400  # Bad request
-
-
-class AstavomsInvalidInput(AstavomsRESTError):
-    """Input is missing some elements"""
-    status_code = 400  # Bad request
-
-
-class AstavomsInvalidProxy(AstavomsRESTError):
-    """Client proxy certificates are not well formated or missing"""
-    status_code = 400  # Bad request
-
-
-class AstavomsUnknownVO(AstavomsRESTError):
-    """Virtual Organization not in dictionary"""
-    status_code = 400  # Bad request
-
-
-class AstavomsProjectError(AstavomsRESTError):
-    """Failed to enroll user to project"""
-    status_code = 400  # Unauthorized
-
-
-class AstavomsUnauthorizedVOMS(AstavomsRESTError):
-    """VOMS Authentication Failed"""
-    status_code = 401  # Unauthorized
-
-
-class AstavomsInvalidToken(AstavomsRESTError):
-    """This token does not match with any Astavoms users"""
-    status_code = 401  # Unauthorized
-
-
-class AstavomsSynnefoError(AstavomsRESTError):
-    """Synnefo Error"""
-    status_code = 500  # Internal Server Error
-
-    def __init__(
-            self, message=None, status_code=500, payload=dict(), error=None):
-        if error:
-            snf_status = getattr(error, 'status', '')
-            message = message or 'SNF: {err} {status}'.format(
-                err=error, status=snf_status)
-            payload = payload.update(dict(
-                type=error, error='{0}'.format(error), snf_status=snf_status))
-            status_code = snf_status or status_code
-        AstavomsRESTError.__init__(self, message, status_code, payload)
-
-
-@app.errorhandler(AstavomsInputIsMissing)
-@app.errorhandler(AstavomsInvalidInput)
-@app.errorhandler(AstavomsUnknownVO)
-@app.errorhandler(AstavomsProjectError)
-@app.errorhandler(AstavomsInvalidProxy)
-@app.errorhandler(AstavomsUnauthorizedVOMS)
-@app.errorhandler(AstavomsInvalidToken)
-@app.errorhandler(AstavomsSynnefoError)
+@app.errorhandler(errors.AstavomsInputIsMissing)
+@app.errorhandler(errors.AstavomsInvalidInput)
+@app.errorhandler(errors.AstavomsUnknownVO)
+@app.errorhandler(errors.AstavomsProjectError)
+@app.errorhandler(errors.AstavomsInvalidProxy)
+@app.errorhandler(errors.AstavomsUnauthorizedVOMS)
+@app.errorhandler(errors.AstavomsInvalidToken)
+@app.errorhandler(errors.AstavomsSynnefoError)
 def handle_invalid_usage(error):
     response = jsonify(error.to_dict())
     response.status_code = error.status_code
@@ -124,7 +50,7 @@ def log_errors(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            if isinstance(e, AstavomsRESTError):
+            if isinstance(e, errors.AstavomsRESTError):
                 logger.info('{err_type} {status} {message}'.format(
                     err_type=type(e), status=e.status_code, message=e.message))
                 if e.payload:
@@ -184,7 +110,7 @@ def resolve_user(dn, cert, chain):
     try:
         voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
     except (M2Crypto.X509.X509Error, VomsError) as e:
-        raise AstavomsUnauthorizedVOMS(
+        raise errors.AstavomsUnauthorizedVOMS(
             payload=dict(type=e, error='{0}'.format(e)))
     logger.debug('VOMS user: {voms}'.format(voms=voms_user))
 
@@ -193,7 +119,7 @@ def resolve_user(dn, cert, chain):
     try:
         snf_admin.authenticate()
     except SynnefoError as se:
-        raise AstavomsSynnefoError(
+        raise errors.AstavomsSynnefoError(
             'SNF admin failed to authenticate themselves', error=se)
     response_data = None
 
@@ -213,7 +139,8 @@ def resolve_user(dn, cert, chain):
             try:
                 project_id = vo_projects[vo]
             except KeyError:
-                raise AstavomsUnknownVO('Unknown VO: {vo}'.format(vo=vo))
+                raise errors.AstavomsUnknownVO(
+                    'Unknown VO: {vo}'.format(vo=vo))
 
             logger.info('Make sure user exists in LDAP')
             user = ldap_user.search_by_voms(dn, vo)
@@ -292,7 +219,7 @@ def resolve_user(dn, cert, chain):
                 enroll_to_project(snf_admin, email, project_id)
 
     except SynnefoError as se:
-        raise AstavomsSynnefoError(error=se)
+        raise errors.AstavomsSynnefoError(error=se)
 
     logger.info('Compile response data')
     response_data = response_data or snf_admin.authenticate(snf_token)
@@ -348,20 +275,21 @@ def tokens():
     """
     logger.info('POST /v2.0/tokens')
     if not request.data:
-        raise AstavomsInputIsMissing()
+        raise errors.AstavomsInputIsMissing()
 
     logger.debug('Headers: {0}'.format(request.headers))
 
     data = request.json
     logger.debug('data: {0}'.format(data))
     if not all([data, "auth" in data, "voms" in data["auth"], data["auth"]]):
-        raise AstavomsInvalidInput()
+        raise errors.AstavomsInvalidInput()
 
     logger.info("Get client certificate data")
     try:
         dn, cert, chain = get_voms_proxy(request.environ)
     except Exception as e:
-        raise AstavomsInvalidProxy(payload=dict(type=e, error='{0}'.format(e)))
+        raise errors.AstavomsInvalidProxy(
+            payload=dict(type=e, error='{0}'.format(e)))
 
     r = resolve_user(dn, cert, chain)
     return make_response(jsonify(r), 202)
@@ -405,7 +333,7 @@ def tenants():
         try:
             dn, cert, chain = get_voms_proxy(request.environ)
         except Exception:
-            raise AstavomsInvalidInput(
+            raise errors.AstavomsInvalidInput(
                 'X-Auth-token header or client proxy required')
         snf_user = resolve_user(dn, cert, chain)
     logger.debug('SNF user: {user}'.format(user=snf_user))
