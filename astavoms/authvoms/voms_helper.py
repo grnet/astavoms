@@ -13,6 +13,9 @@
 # under the License.
 
 import ctypes
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class _voms(ctypes.Structure):

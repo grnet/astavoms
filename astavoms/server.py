@@ -357,7 +357,79 @@ def tenants():
     return make_response(jsonify(response_data), response_code)
 
 
+@app.route('/v2.0', methods=['GET', ])
+@log_errors
+def show_version_details():
+    """OpenStack v2.0 call, for client compatibility"""
+    r = {
+        "version": {
+            "status": "stable",
+            "updated": "2014-04-17T00:00:00Z",
+            "media-types": [
+                {
+                    "base": "application/json",
+                    "type": "application/vnd.openstack.identity-v2.0+json"
+                }
+            ],
+            "id": "v2.0",
+            "links": [
+                {
+                    "href": "http://example.com/identity/v2.0/",
+                    "rel": "self"
+                },
+                {
+                    "href": "http://docs.openstack.org/",
+                    "rel": "describedby",
+                    "type": "text/html"
+                }
+            ]
+        }
+    }
+    return make_response(jsonify(r), 200)
+
+
+@app.route('/', methods=['GET', ])
+@log_errors
+def list_versions():
+    """OpenStack v2.0 call, for client compatibility"""
+    name = app.config.get('SERVER_NAME', 'localhost')
+    scheme = app.config.get('PREFERRED_URL_SCHEME', 'https')
+    self_url = '{scheme}://{name}/v2.0/'.format(
+        scheme=scheme, name=name)
+    r = {
+        'versions': {
+            'values': [
+                {
+                    'id': 'v2.0',
+                    'links': [
+                        {
+                            'href': self_url,
+                            'rel': 'self'
+                        },
+                        {
+                            'href': 'http://docs.openstack.org/',
+                            'rel': 'describedby',
+                            'type': 'text/html'
+                        }
+                    ],
+                    'media-types': [
+                        {
+                            'base': 'application/json',
+                            'type': 'application/vnd.openstack.identity-v2.0+'
+                                    'json'
+                        }
+                    ],
+                    'status': 'stable',
+                    'updated': '2014-04-17T00:00:00Z'
+                },
+            ],
+        }
+    }
+    return make_response(jsonify(r), 200)
+
+
 # For testing
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
