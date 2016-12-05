@@ -62,8 +62,8 @@ class VOMS(object):
         self.VOMSApi = ctypes.CDLL(vomsapi_lib)
         self.VOMSApi.VOMS_Init.restype = ctypes.POINTER(_vomsdata)
 
-        self.VOMSDIR = vomsdir_path
-        self.CADIR = ca_path
+        self.VOMSDIR = ctypes.c_char_p(vomsdir_path)
+        self.CADIR = ctypes.c_char_p(ca_path)
 
         self.vd = None
 
