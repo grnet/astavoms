@@ -59,6 +59,7 @@ server.ASTAVOMS_SERVER_SETTINGS.update(dict(
     snf_admin=snf_admin,
     vo_projects=vo_projects,
     disable_voms_verification=settings.get('disable_voms_verification'),
+    self_url=settings.get('self_url', 'https://127.0.0.1:443'),
 ))
 application.config.from_object(server)
 debug = settings.get('debug')

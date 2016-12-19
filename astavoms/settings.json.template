@@ -1,4 +1,5 @@
 {
+    "self_url": "https://astavoms.example.org:443",
     "ldap_url": "ldap://ldap.example.org",
     "ldap_admin": "cn=admin,dc=example,dc=org",
     "ldap_password": "passwd",

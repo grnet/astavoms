@@ -361,6 +361,8 @@ def tenants():
 @log_errors
 def show_version_details():
     """OpenStack v2.0 call, for client compatibility"""
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
+    self_url = settings.get('self_url', 'https://127.0.0.1:443')
     r = {
         "version": {
             "status": "stable",
@@ -374,7 +376,7 @@ def show_version_details():
             "id": "v2.0",
             "links": [
                 {
-                    "href": "http://example.com/identity/v2.0/",
+                    "href": self_url,
                     "rel": "self"
                 },
                 {
@@ -392,10 +394,8 @@ def show_version_details():
 @log_errors
 def list_versions():
     """OpenStack v2.0 call, for client compatibility"""
-    name = app.config.get('SERVER_NAME', 'localhost')
-    scheme = app.config.get('PREFERRED_URL_SCHEME', 'https')
-    self_url = '{scheme}://{name}/v2.0/'.format(
-        scheme=scheme, name=name)
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
+    self_url = settings.get('self_url', 'https://127.0.0.1:443')
     r = {
         'versions': {
             'values': [
@@ -425,7 +425,7 @@ def list_versions():
             ],
         }
     }
-    return make_response(jsonify(r), 200)
+    return make_response(jsonify(r), 300)
 
 
 # For testing
