@@ -438,9 +438,11 @@ def oidc_redirect():
     logger.info('GET /oidc/callback')
 
     # Get User Info
-    settings = app.config['ASTAVOMS_SERVER_SETTINGS'].get('oidc', None)
-    logger.debug('OIDC settings: {}'.format(settings))
-    if settings is None:
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
+    logger.debug('settings: {}'.format(settings))
+    try:
+        oidc_settings = settings['oidc']
+    except KeyError:
         logger.info('No oidc in settings')
         raise errors.AstavomsInvalidInput()
     code = oidc.extract_code(request.environ)
@@ -448,12 +450,12 @@ def oidc_redirect():
     if code is None:
         logger.info('No code extracted')
         raise errors.AstavomsInputIsMissing()
-    endpoints = settings.get('endpoints')
+    endpoints = oidc_settings.get('endpoints')
     tokens = oidc.get_tokens(
         endpoints['token'],
-        client_id=settings['client_id'],
-        client_secret=settings['client_secret'],
-        redirect_uri=settings['redirect_uri'],
+        client_id=oidc_settings['client_id'],
+        client_secret=oidc_settings['client_secret'],
+        redirect_uri=oidc_settings['redirect_uri'],
         grant_type='authorization_code',
         code=code)
     if not tokens:
@@ -464,8 +466,112 @@ def oidc_redirect():
         logger.info('No user info returned')
         raise errors.AstavomsInputIsMissing
     logger.debug('user_info: {}'.format(user_info))
+    snf_admin, response_data = settings['snf_admin'], None
 
-    raise NotImplementedError('OIDC is not yet supported')
+    # LookUp User
+    sub = user_info.get('sub')
+    oidc_user_id, vo = sub.split('@')
+    dn = 'CN={}'.format(oidc_user_id)
+    logger.info('Look up for {dn} of {vo}'.format(dn=dn, vo=vo))
+    ldap_args = settings['ldap_args']
+    logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
+    logger.info('Load mappings of VOs to Synnefo Projects')
+    with open(settings['vo_projects']) as f:
+        vo_projects = json.load(f)
+    logger.debug('VO-projects: {vo_projects}'.format(vo_projects=vo_projects))
+    logger.info('Make sure VO is known')
+    try:
+        project_id = vo_projects[vo]
+    except KeyError:
+        raise errors.AstavomsUnknownVO('Unknown VO: {}'.format(vo))
+    logger.debug('VO project_id: {}'.format(project_id))
+    try:
+        with LDAPUser(**ldap_args) as ldap_user:
+            logger.info('Look up in LDAP')
+            user = ldap_user.search_by_voms(dn, vo)
+            logger.debug('LDAP User: {user}'.format(user=user))
+            pool_args = settings['pool_args']
+
+            if not user:
+                logger.info('New user, pop Synnefo account from pool')
+                try:
+                    with Userpool(**pool_args) as pool:
+                        user = pool.pop()
+                        snf_uuid, snf_token = user['uuid'], user['token']
+                        email = user['email']
+                except UserpoolError as upe:
+                    logger.info('Failed to pop from user pool')
+                    logger.debug('Userpool error: {0}'.format(upe))
+                    logger.info('Create user')
+                    email = sub
+                    try:
+                        snf_user = snf_admin.get_client().get_uuid(email)
+                        logger.info('SNF user exists, renew token')
+                        snf_user = snf_admin.renew_user_token(snf_uuid)
+                    except SynnefoError as se:
+                        if getattr(se, 'status') not in (404, 500, ):
+                            # AstakosClient.get_uuid returns 500
+                            raise
+                        logger.debug('SNF: {err} {status}'.format(
+                            err=se, status=getattr(se, 'status')))
+                        logger.info('SNF user not found, create one')
+                        snf_user = create_snf_user(
+                            snf_admin, pool_args, dn, vo, email, project_id)
+                    snf_uuid = snf_user['id']
+                    snf_token = snf_user['auth_token']
+                logger.info('Store user in LDAP')
+                cn = 'CN={oidc_user_id},CN={email},{O}'.format(
+                    oidc_user_id=oidc_user_id,
+                    email=user_info['email'],
+                    O=','.join(['DC={}'.format(dc) for dc in vo.split('.')]))
+                ldap_user.create(
+                    snf_uuid=snf_uuid, snf_token=snf_token, mail=email, cn=cn,
+                    vo=vo, user_dn=dn)
+            else:
+                logger.info('Authenticate Synnefo User')
+                user = user[0][1]
+                email = user['mail'][0]
+                snf_uuid = user['uid'][0]
+                snf_token = user['userPassword'][0]
+                with Userpool(**pool_args) as pool:
+                    user = pool.list(uuid=snf_uuid)[0]
+                if user[2] != snf_token:
+                    snf_token = user[2]
+                    ldap_user.update_snf_token(snf_uuid, snf_token)
+                try:
+                    response_data = snf_admin.authenticate(snf_token)
+                except SynnefoError as se:
+                    status = getattr(se, 'status')
+                    if status not in (401, ):
+                        raise
+                    logger.debug('SNF: {error} {status}'.format(
+                        error=se, status=status))
+                    logger.info('Authentication failed, refresh SNF token')
+                    try:
+                        snf_user = snf_admin.renew_user_token(snf_uuid)
+                        snf_token = snf_user['auth_token']
+                        logger.info('Update ldap with new token')
+                        ldap_user.update_snf_token(snf_uuid, snf_token)
+                    except SynnefoError as no_user:
+                        status = getattr(no_user, 'status')
+                        logger.debug('SNF: {error} {status}'.format(
+                            error=no_user, status=status))
+                        logger.info('SNF: user not found')
+                        raise
+
+        logger.info('Make sure user is enrolled to project')
+        enroll_to_project(snf_admin, email, project_id)
+
+    except SynnefoError as se:
+        raise errors.AstavomsSynnefoError(error=se)
+
+    logger.info('Compile response data')
+    response_data = response_data or snf_admin.authenticate(snf_token)
+    response_data['access']['token']['tenant']['id'] = project_id
+    response_data['access']['token']['tenant']['name'] = vo
+    logger.debug('Response data: {data}'.format(data=response_data))
+    response_data['mail'] = email
+    return make_response(jsonify(response_data), 202)
 
 
 # For testing
