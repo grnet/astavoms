@@ -80,7 +80,10 @@ def create_snf_user(snf_admin, dn, vo, email, project=None):
     logger.info(
         'Create SNF user {first_name} {last_name} '
         'of {affiliation} (email: {username} )'.format(**kw))
-    return snf_admin.create_user(**kw)
+    r = snf_admin.create_user(**kw)
+    if project:
+        enroll_to_project(snf_admin, email, project)
+    return r
 
 
 def enroll_to_project(snf_admin, email, project):
@@ -436,10 +439,12 @@ def oidc_redirect():
 
     # Get User Info
     settings = app.config['ASTAVOMS_SERVER_SETTINGS'].get('oidc', None)
+    logger.debug('OIDC settings: {}'.format(settings))
     if settings is None:
         logger.info('No oidc in settings')
         raise errors.AstavomsInvalidInput()
     code = oidc.extract_code(request.environ)
+    logger.debug('code: {}'.format(code))
     if code is None:
         logger.info('No code extracted')
         raise errors.AstavomsInputIsMissing()

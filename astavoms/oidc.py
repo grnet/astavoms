@@ -54,10 +54,10 @@ def get_user_info(endpoint, tokens):
     :tokens: a JWT with access tokens
     """
     logger.info('GET {}'.format(endpoint))
-    header = {'Authorization': '{type} {token}'.format(
+    headers = {'Authorization': '{type} {token}'.format(
         type=tokens['token_type'], token=tokens['access_token'])}
-    logger.debug('header: {}'.format(header))
-    r = requests.get(endpoint, header=header)
+    logger.debug('headers: {}'.format(headers))
+    r = requests.get(endpoint, headers=headers)
     user_info = r.json()
     logger.debug('user info: {}'.format(user_info))
     return user_info
