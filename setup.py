@@ -51,6 +51,6 @@ setup(
         ]
     },
     install_requires=[
-        'kamaki', 'python-ldap', 'Flask', 'M2Crypto', 'psycopg2',
+        'kamaki', 'python-ldap', 'Flask', 'M2Crypto', 'psycopg2', 'requests',
     ]
 )
