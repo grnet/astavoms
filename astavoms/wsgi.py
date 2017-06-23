@@ -1,4 +1,4 @@
-# Copyright (C) 2016 GRNET S.A.
+# Copyright (C) 2016 - 2017 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -60,6 +60,7 @@ server.ASTAVOMS_SERVER_SETTINGS.update(dict(
     vo_projects=vo_projects,
     disable_voms_verification=settings.get('disable_voms_verification'),
     self_url=settings.get('self_url', 'https://127.0.0.1:443'),
+    oidc=settings.get('oidc', None),
 ))
 application.config.from_object(server)
 debug = settings.get('debug')

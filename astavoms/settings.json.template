@@ -18,5 +18,14 @@
     "ca_path": "/etc/grid-security/certificates",
     "voms_api_lib": "/usr/lib/libvomsapi.so.1",
     "logfile": "/var/log/astavoms/server.log",
-    "debug": false
+    "debug": false,
+    "oidc": {
+        "endpoints": {
+            "token": "https://aai-dev.egi.eu/oidc/token",
+            "user_info": "https://aai-dev.egi.eu/oidc/userinfo"
+        },
+        "client_id": "SomeClientUUID",
+        "client_secret": "MAtchingClientSecret",
+        "redirect_uri": "https://astavoms.example.org/oidc/callback"
+    }
 }

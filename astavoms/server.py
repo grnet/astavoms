@@ -1,4 +1,4 @@
-# Copyright 2016 GRNET S.A.
+# Copyright 2016-2017 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ from astavoms.authvoms import M2Crypto, VomsError
 from astavoms.ldapuser import LDAPUser
 from astavoms.userpool import Userpool, UserpoolError
 from kamaki.clients import ClientError as SynnefoError
-from astavoms import utils, errors
+from astavoms import utils, errors, oidc
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
@@ -426,6 +426,41 @@ def list_versions():
         }
     }
     return make_response(jsonify(r), 300)
+
+
+@app.route('/oidc/callback', methods=['GET', ])
+@log_errors
+def oidc_redirect():
+    """Echo or log OIDC redirect"""
+    logger.info('GET /oidc/callback')
+
+    # Get User Info
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS'].get('oidc', None)
+    if settings is None:
+        logger.info('No oidc in settings')
+        raise errors.AstavomsInvalidInput()
+    code = oidc.extract_code(request.environ)
+    if code is None:
+        logger.info('No code extracted')
+        raise errors.AstavomsInputIsMissing()
+    endpoints = settings.get('endpoints')
+    tokens = oidc.get_tokens(
+        endpoints['token'],
+        client_id=settings['client_id'],
+        client_secret=settings['client_secret'],
+        redirect_uri=settings['redirect_uri'],
+        grant_type='authorization_code',
+        code=code)
+    if not tokens:
+        logger.info('No tokens returned')
+        raise errors.AstavomsInputIsMissing()
+    user_info = oidc.get_user_info(endpoints['user_info'], tokens)
+    if not user_info:
+        logger.info('No user info returned')
+        raise errors.AstavomsInputIsMissing
+    logger.debug('user_info: {}'.format(user_info))
+
+    raise NotImplementedError('OIDC is not yet supported')
 
 
 # For testing
