@@ -61,3 +61,9 @@ def get_user_info(endpoint, tokens):
     user_info = r.json()
     logger.debug('user info: {}'.format(user_info))
     return user_info
+
+
+def extract_vo(user_info):
+    """:raise KeyError if no entitlements"""
+    entitlements = user_info.get('edu_person_entitlements', None)
+    return entitlements[0].split('@')[-1] if entitlements else None

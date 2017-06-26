@@ -64,6 +64,16 @@ Instead of a token, header, you can use a client proxy instead.
 
 The /v2.0/tenants endpoint is also implemented.
 
+Open ID Connect
+---------------
+Astavoms supports Open ID Connect authentication since version 0.5.
+In order to take advantage of this feature, you need to set up your HTTP server
+as a OIDC Relying Party. You must also fill in the Astavoms "settings.json"
+file with OIDC-related credentials and redirect URIs. Please, read the docs for
+more information on how to setup Apache2 as an OIDC RP for Fedcloud and how to
+configure Astavoms to take advantage of that.
+
+
 Tools
 -----
 

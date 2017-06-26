@@ -465,13 +465,16 @@ def oidc_redirect():
     if not user_info:
         logger.info('No user info returned')
         raise errors.AstavomsInputIsMissing
+
     logger.debug('user_info: {}'.format(user_info))
     snf_admin, response_data = settings['snf_admin'], None
 
     # LookUp User
-    sub = user_info.get('sub')
-    oidc_user_id, vo = sub.split('@')
-    dn = 'CN={}'.format(oidc_user_id)
+    sub, vo = user_info.get('sub'), oidc.extract_vo(user_info)
+    if not vo:
+        logger.info('Could not extract VO')
+        raise errors.AstavomsInputIsMissing('User not in a VO')
+    dn = 'CN={}'.format(sub)
     logger.info('Look up for {dn} of {vo}'.format(dn=dn, vo=vo))
     ldap_args = settings['ldap_args']
     logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
@@ -521,7 +524,7 @@ def oidc_redirect():
                     snf_token = snf_user['auth_token']
                 logger.info('Store user in LDAP')
                 cn = 'CN={oidc_user_id},CN={email},{O}'.format(
-                    oidc_user_id=oidc_user_id,
+                    oidc_user_id=sub,
                     email=user_info['email'],
                     O=','.join(['DC={}'.format(dc) for dc in vo.split('.')]))
                 ldap_user.create(
