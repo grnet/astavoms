@@ -100,23 +100,10 @@ def enroll_to_project(snf_admin, email, project):
         logger.debug('User is already enrolled')
 
 
-def resolve_user(dn, cert, chain):
-    """Use LDAP and Synnefo to resolve a user from a proxy
+def resolve_user(dn, vo, settings):
+    """Given the extracted request information, resolve Synnefo user
+    :returns: the API response, enhanced with user information
     """
-    logger.info('Load settings')
-    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
-    logger.debug('settings: {settings}'.format(settings=settings))
-
-    logger.info('Authenticate VOMS user')
-    vomsauth = settings['vomsauth']
-    voms_verify = not settings.get('disable_voms_verification')
-    try:
-        voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
-    except (M2Crypto.X509.X509Error, VomsError) as e:
-        raise errors.AstavomsUnauthorizedVOMS(
-            payload=dict(type=e, error='{0}'.format(e)))
-    logger.debug('VOMS user: {voms}'.format(voms=voms_user))
-
     logger.info('Check SNF admin credentials')
     snf_admin = settings['snf_admin']
     try:
@@ -130,21 +117,20 @@ def resolve_user(dn, cert, chain):
     with open(settings['vo_projects']) as f:
         vo_projects = json.load(f)
     logger.debug('VO-projects: {vo_projects}'.format(vo_projects=vo_projects))
+    logger.info('Make sure VO is known')
+    try:
+        project_id = vo_projects[vo]
+    except KeyError:
+        raise errors.AstavomsUnknownVO('Unknown VO: {}'.format(vo))
+    logger.debug('VO project_id: {}'.format(project_id))
 
     logger.info('Connect to LDAP directory')
     ldap_args = settings['ldap_args']
     logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
+    response_data = None
+
     try:
         with LDAPUser(**ldap_args) as ldap_user:
-            dn, vo = voms_user['user'], voms_user['voname']
-
-            logger.info('Make sure VO is known')
-            try:
-                project_id = vo_projects[vo]
-            except KeyError:
-                raise errors.AstavomsUnknownVO(
-                    'Unknown VO: {vo}'.format(vo=vo))
-
             logger.info('Make sure user exists in LDAP')
             user = ldap_user.search_by_voms(dn, vo)
             logger.debug('LDAP User: {user}'.format(user=user))
@@ -228,7 +214,6 @@ def resolve_user(dn, cert, chain):
     response_data = response_data or snf_admin.authenticate(snf_token)
     response_data['access']['token']['tenant']['id'] = project_id
     response_data['access']['token']['tenant']['name'] = vo
-    response_data.update(voms_user)
     logger.debug('Response data: {data}'.format(data=response_data))
     response_data['mail'] = email
     return response_data
@@ -294,7 +279,23 @@ def tokens():
         raise errors.AstavomsInvalidProxy(
             payload=dict(type=e, error='{0}'.format(e)))
 
-    r = resolve_user(dn, cert, chain)
+    logger.info('Load settings')
+    settings = app.config['ASTAVOMS_SERVER_SETTINGS']
+    logger.debug('settings: {settings}'.format(settings=settings))
+
+    logger.info('Authenticate VOMS user')
+    vomsauth = settings['vomsauth']
+    voms_verify = not settings.get('disable_voms_verification')
+    try:
+        voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
+    except (M2Crypto.X509.X509Error, VomsError) as e:
+        raise errors.AstavomsUnauthorizedVOMS(
+            payload=dict(type=e, error='{0}'.format(e)))
+    logger.debug('VOMS user: {voms}'.format(voms=voms_user))
+
+    dn, vo = voms_user['user'], voms_user['voname']
+    r = resolve_user(dn, vo, settings)
+    r.update(voms_user)
     return make_response(jsonify(r), 202)
 
 
@@ -338,7 +339,19 @@ def tenants():
         except Exception:
             raise errors.AstavomsInvalidInput(
                 'X-Auth-token header or client proxy required')
-        snf_user = resolve_user(dn, cert, chain)
+
+        logger.info('Authenticate VOMS user')
+        vomsauth = settings['vomsauth']
+        voms_verify = not settings.get('disable_voms_verification')
+        try:
+            voms_user = vomsauth.get_voms_info(cert, chain, voms_verify)
+        except (M2Crypto.X509.X509Error, VomsError) as e:
+            raise errors.AstavomsUnauthorizedVOMS(
+                payload=dict(type=e, error='{0}'.format(e)))
+        logger.debug('VOMS user: {voms}'.format(voms=voms_user))
+        dn, vo = voms_user['user'], voms_user['voname']
+
+        snf_user = resolve_user(dn, vo, settings)
     logger.debug('SNF user: {user}'.format(user=snf_user))
     user_projects = snf_user['access']['user']['projects']
 
@@ -465,116 +478,16 @@ def oidc_redirect():
     if not user_info:
         logger.info('No user info returned')
         raise errors.AstavomsInputIsMissing
-
     logger.debug('user_info: {}'.format(user_info))
-    snf_admin, response_data = settings['snf_admin'], None
 
     # LookUp User
     sub, vo = user_info.get('sub'), oidc.extract_vo(user_info)
     if not vo:
         logger.info('Could not extract VO')
         raise errors.AstavomsInputIsMissing('User not in a VO')
-    dn = 'CN={}'.format(sub)
-    logger.info('Look up for {dn} of {vo}'.format(dn=dn, vo=vo))
-    ldap_args = settings['ldap_args']
-    logger.debug('LDAP args: {ldap_args}'.format(ldap_args=ldap_args))
-    logger.info('Load mappings of VOs to Synnefo Projects')
-    with open(settings['vo_projects']) as f:
-        vo_projects = json.load(f)
-    logger.debug('VO-projects: {vo_projects}'.format(vo_projects=vo_projects))
-    logger.info('Make sure VO is known')
-    try:
-        project_id = vo_projects[vo]
-    except KeyError:
-        raise errors.AstavomsUnknownVO('Unknown VO: {}'.format(vo))
-    logger.debug('VO project_id: {}'.format(project_id))
-    try:
-        with LDAPUser(**ldap_args) as ldap_user:
-            logger.info('Look up in LDAP')
-            user = ldap_user.search_by_voms(dn, vo)
-            logger.debug('LDAP User: {user}'.format(user=user))
-            pool_args = settings['pool_args']
-
-            if not user:
-                logger.info('New user, pop Synnefo account from pool')
-                try:
-                    with Userpool(**pool_args) as pool:
-                        user = pool.pop()
-                        snf_uuid, snf_token = user['uuid'], user['token']
-                        email = user['email']
-                except UserpoolError as upe:
-                    logger.info('Failed to pop from user pool')
-                    logger.debug('Userpool error: {0}'.format(upe))
-                    logger.info('Create user')
-                    email = sub
-                    try:
-                        snf_user = snf_admin.get_client().get_uuid(email)
-                        logger.info('SNF user exists, renew token')
-                        snf_user = snf_admin.renew_user_token(snf_uuid)
-                    except SynnefoError as se:
-                        if getattr(se, 'status') not in (404, 500, ):
-                            # AstakosClient.get_uuid returns 500
-                            raise
-                        logger.debug('SNF: {err} {status}'.format(
-                            err=se, status=getattr(se, 'status')))
-                        logger.info('SNF user not found, create one')
-                        snf_user = create_snf_user(
-                            snf_admin, pool_args, dn, vo, email, project_id)
-                    snf_uuid = snf_user['id']
-                    snf_token = snf_user['auth_token']
-                logger.info('Store user in LDAP')
-                cn = 'CN={oidc_user_id},CN={email},{O}'.format(
-                    oidc_user_id=sub,
-                    email=user_info['email'],
-                    O=','.join(['DC={}'.format(dc) for dc in vo.split('.')]))
-                ldap_user.create(
-                    snf_uuid=snf_uuid, snf_token=snf_token, mail=email, cn=cn,
-                    vo=vo, user_dn=dn)
-            else:
-                logger.info('Authenticate Synnefo User')
-                user = user[0][1]
-                email = user['mail'][0]
-                snf_uuid = user['uid'][0]
-                snf_token = user['userPassword'][0]
-                with Userpool(**pool_args) as pool:
-                    user = pool.list(uuid=snf_uuid)[0]
-                if user[2] != snf_token:
-                    snf_token = user[2]
-                    ldap_user.update_snf_token(snf_uuid, snf_token)
-                try:
-                    response_data = snf_admin.authenticate(snf_token)
-                except SynnefoError as se:
-                    status = getattr(se, 'status')
-                    if status not in (401, ):
-                        raise
-                    logger.debug('SNF: {error} {status}'.format(
-                        error=se, status=status))
-                    logger.info('Authentication failed, refresh SNF token')
-                    try:
-                        snf_user = snf_admin.renew_user_token(snf_uuid)
-                        snf_token = snf_user['auth_token']
-                        logger.info('Update ldap with new token')
-                        ldap_user.update_snf_token(snf_uuid, snf_token)
-                    except SynnefoError as no_user:
-                        status = getattr(no_user, 'status')
-                        logger.debug('SNF: {error} {status}'.format(
-                            error=no_user, status=status))
-                        logger.info('SNF: user not found')
-                        raise
-
-        logger.info('Make sure user is enrolled to project')
-        enroll_to_project(snf_admin, email, project_id)
-
-    except SynnefoError as se:
-        raise errors.AstavomsSynnefoError(error=se)
-
-    logger.info('Compile response data')
-    response_data = response_data or snf_admin.authenticate(snf_token)
-    response_data['access']['token']['tenant']['id'] = project_id
-    response_data['access']['token']['tenant']['name'] = vo
-    logger.debug('Response data: {data}'.format(data=response_data))
-    response_data['mail'] = email
-    return make_response(jsonify(response_data), 202)
+    dn = '/CN={}/OU={}'.format(*sub.split('@'))
+    r = resolve_user(dn, vo, settings)
+    return make_response(jsonify(r), 202)
 
 
 # For testing

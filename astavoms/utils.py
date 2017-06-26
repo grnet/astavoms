@@ -48,7 +48,7 @@ def strip_dict(d):
         d.items()))
 
 
-def dn_to_cn(dn):
+def dn_to_cn(dn, **kw):
     """
     :param dn: (str) e.g., "C=org/O=example/CN=Tyler Durden/cn=1234/CN=5678"
     :returns: e.g., "Tyler Durden.1234.5678" ...
